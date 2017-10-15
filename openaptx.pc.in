@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: Reverse-engineered apt-X
+Description: Reverse-engineered apt-X header file and library stub
+Version: @VERSION@
+Libs: -L${libdir} -lbt-aptx
+Cflags: -I${includedir}
