@@ -12,6 +12,8 @@ AM_PROG_AR
 AM_PROG_CC_C_O
 LT_INIT
 
+PKG_CHECK_MODULES([SNDFILE], [sndfile])
+
 AC_CONFIG_FILES([
 	Makefile
 	src/Makefile
