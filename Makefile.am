@@ -1,7 +1,7 @@
 # [open]aptx - Makefile.am
 # Copyright (c) 2017 Arkadiusz Bokowy
 
-SUBDIRS = src utils
+SUBDIRS = src utils test
 
 include_HEADERS = include/openaptx.h
 noinst_HEADERS = include/aptx422.h
