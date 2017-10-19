@@ -16,3 +16,4 @@ Resources
 
 1. [AptX audio codec family](https://en.wikipedia.org/wiki/AptX)
 2. [Method and apparatus for electrical signal coding](https://www.google.com/patents/EP0398973B1?cl=en)
+3. [Two-channel QMF bank](https://www.hindawi.com/journals/isrn/2013/815619/)
