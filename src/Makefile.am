@@ -5,12 +5,21 @@ AM_CFLAGS = -I$(top_srcdir)/include
 AM_LDFLAGS = -avoid-version
 
 lib_LTLIBRARIES = \
-	libbt-aptx.la
+	libbt-aptx.la \
+	libbt-aptx422.la
 
 libbt_aptx_la_SOURCES = \
 	bt-aptx-stub-sonar.c \
 	bt-aptx-stub-sonar-hd.c \
 	bt-aptx-stub.c
+
+libbt_aptx422_la_SOURCES = \
+	aptx422/encode.c \
+	aptx422/params.c \
+	aptx422/qmf.c \
+	aptx422/quantizer.c \
+	aptx422/search.c \
+	aptx422.c
 
 bt-aptx-stub-sonar.c: $(srcdir)/sonar.aptx
 	echo " \

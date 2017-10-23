@@ -8,8 +8,8 @@
  *
  */
 
-#ifndef OPENAPTX_PARAMS_H_
-#define OPENAPTX_PARAMS_H_
+#ifndef OPENAPTX_APTX244_PARAMS_H_
+#define OPENAPTX_APTX244_PARAMS_H_
 
 #include "aptx422.h"
 

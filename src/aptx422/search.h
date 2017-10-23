@@ -8,8 +8,8 @@
  *
  */
 
-#ifndef OPENAPTX_SEARCH_H_
-#define OPENAPTX_SEARCH_H_
+#ifndef OPENAPTX_APTX422_SEARCH_H_
+#define OPENAPTX_APTX422_SEARCH_H_
 
 #include <stddef.h>
 #include <stdint.h>

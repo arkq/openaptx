@@ -10,7 +10,7 @@
 
 #include "qmf.h"
 
-#include <stdlib.h>
+#include <stddef.h>
 
 #include "mathex.h"
 #include "params.h"

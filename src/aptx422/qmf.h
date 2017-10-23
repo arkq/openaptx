@@ -8,8 +8,8 @@
  *
  */
 
-#ifndef OPENAPTX_QMF_H_
-#define OPENAPTX_QMF_H_
+#ifndef OPENAPTX_APTX244_QMF_H_
+#define OPENAPTX_APTX244_QMF_H_
 
 #include "aptx422.h"
 

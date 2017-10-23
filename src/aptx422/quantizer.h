@@ -1,0 +1,45 @@
+/*
+ * [open]aptx - quantizer.h
+ * Copyright (c) 2017 Arkadiusz Bokowy
+ *
+ * This file is a part of [open]aptx.
+ *
+ * This project is licensed under the terms of the MIT license.
+ *
+ */
+
+#ifndef OPENAPTX_APTX244_QUANTIZER_H_
+#define OPENAPTX_APTX244_QUANTIZER_H_
+
+#include "aptx422.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void aptX_quantize_difference_LL(
+		int32_t diff,
+		int32_t dither,
+		int32_t x,
+		aptX_quantizer_422 *q);
+void aptX_quantize_difference_LH(
+		int32_t diff,
+		int32_t dither,
+		int32_t x,
+		aptX_quantizer_422 *q);
+void aptX_quantize_difference_HL(
+		int32_t diff,
+		int32_t dither,
+		int32_t x,
+		aptX_quantizer_422 *q);
+void aptX_quantize_difference_HH(
+		int32_t diff,
+		int32_t dither,
+		int32_t x,
+		aptX_quantizer_422 *q);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
