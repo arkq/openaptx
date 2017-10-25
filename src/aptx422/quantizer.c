@@ -10,8 +10,6 @@
 
 #include "quantizer.h"
 
-#include <stddef.h>
-
 #include "mathex.h"
 #include "search.h"
 

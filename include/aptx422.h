@@ -11,6 +11,7 @@
 #ifndef OPENAPTX_APTX422_H_
 #define OPENAPTX_APTX422_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus

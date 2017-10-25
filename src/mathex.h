@@ -19,6 +19,11 @@
 #define abs32(v) ((v ^ (v >> 31)) - (v >> 31))
 
 /**
+ * Right shift integer by 8 bits with half down rounding. */
+#define rshift8(v) \
+	((((v) + 0x80) >> 8) - ((uint8_t)(v) == 0x80))
+
+/**
  * Right shift integer by 15 bits with half down rounding. */
 #define rshift15(v) \
 	((((v) + 0x4000) >> 15) - ((uint16_t)(v) == 0x4000))
@@ -34,10 +39,14 @@
 	((((v) + 0x80000000) >> 32) - ((uint32_t)(v) == 0x80000000))
 
 /**
- * Clamp signed integer to 24 bits. */
-#define clamp_int24_t(v) do { \
-		if (v < INT24_MIN) v = INT24_MIN; \
-		else if (v > INT24_MAX) v = INT24_MAX; \
+ * Clip value to the [lo, up] range. */
+#define clip_range(v, lo, up) do { \
+		if (v < (lo)) v = lo; \
+		else if (v > (up)) v = up; \
 	} while (0)
+
+/**
+ * Clamp signed integer to 24 bits. */
+#define clamp_int24_t(v) clip_range(v, INT24_MIN, INT24_MAX)
 
 #endif

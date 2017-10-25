@@ -74,6 +74,9 @@ int aptxbtenc_encodestereo(
 	aptX_encode(pcmR, &enc_->analyzer[1], &enc_->encoder[1]);
 	aptX_insert_sync(&enc_->encoder[0], &enc_->encoder[1], &enc_->sync);
 
+	aptX_post_encode(&enc_->encoder[0]);
+	aptX_post_encode(&enc_->encoder[1]);
+
 	tmp = aptX_pack_codeword(&enc_->encoder[0]);
 	code[0] = (tmp >> enc_->swap) | (tmp << enc_->swap);
 	tmp = aptX_pack_codeword(&enc_->encoder[1]);

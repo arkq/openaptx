@@ -36,6 +36,9 @@ void aptX_encode(
 		aptX_QMF_analyzer_422 *qmf,
 		aptX_subband_encoder_422 *e);
 
+void aptX_post_encode(
+		aptX_subband_encoder_422 *e);
+
 #ifdef __cplusplus
 }
 #endif

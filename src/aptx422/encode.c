@@ -10,8 +10,7 @@
 
 #include "encode.h"
 
-#include <stddef.h>
-
+#include "processor.h"
 #include "qmf.h"
 #include "quantizer.h"
 
@@ -104,4 +103,11 @@ void aptX_encode(
 	aptX_quantize_difference_HL(diff[2], e->dither[2], e->processor[2].inverter.unk9, &e->quantizer[2]);
 	aptX_quantize_difference_HH(diff[3], e->dither[3], e->processor[3].inverter.unk9, &e->quantizer[3]);
 
+}
+
+void aptX_post_encode(aptX_subband_encoder_422 *e) {
+	aptX_process_subband(e->quantizer[0].unk1, e->dither[0], &e->processor[0].filter, &e->processor[0].inverter);
+	aptX_process_subband(e->quantizer[1].unk1, e->dither[1], &e->processor[1].filter, &e->processor[1].inverter);
+	aptX_process_subband(e->quantizer[2].unk1, e->dither[2], &e->processor[2].filter, &e->processor[2].inverter);
+	aptX_process_subband(e->quantizer[3].unk1, e->dither[3], &e->processor[3].filter, &e->processor[3].inverter);
 }

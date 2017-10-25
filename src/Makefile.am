@@ -16,6 +16,7 @@ libbt_aptx_la_SOURCES = \
 libbt_aptx422_la_SOURCES = \
 	aptx422/encode.c \
 	aptx422/params.c \
+	aptx422/processor.c \
 	aptx422/qmf.c \
 	aptx422/quantizer.c \
 	aptx422/search.c \

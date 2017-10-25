@@ -9,7 +9,6 @@
  */
 
 #include "params.h"
-#include <stddef.h>
 
 int32_t aptX_IQuant_log_table[32] = {
 	4194304, 4286464, 4380672, 4476928, 4573184, 4673536, 4775936, 4880384,
