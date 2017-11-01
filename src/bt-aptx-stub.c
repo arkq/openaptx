@@ -8,7 +8,13 @@
  *
  */
 
+#include <stdio.h>
+#include <stdlib.h>
 #include "openaptx.h"
+
+/* Auto-generated buffer with apt-X encoded test sound. */
+extern unsigned char sonar_aptx[];
+extern unsigned int sonar_aptx_len;
 
 static struct aptxbtenc_encoder {
 	bool swap;
@@ -17,8 +23,16 @@ static struct aptxbtenc_encoder {
 
 int aptxbtenc_init(APTXENC enc, bool swap) {
 	struct aptxbtenc_encoder *e = (struct aptxbtenc_encoder *)enc;
+
+	fprintf(stderr, "\n"
+			"WARNING! Initializing apt-X encoder stub library. This library does NOT\n"
+			"perform any encoding at all. The sole reason for this library to exist,\n"
+			"is to simplify integration with the proprietary apt-X encoder library\n"
+			"for open-source projects.\n\n");
+
 	e->swap = swap;
 	e->counter = 0;
+
 	return 0;
 }
 
@@ -31,23 +45,15 @@ int aptxbtenc_encodestereo(
 	(void)pcmR;
 
 	struct aptxbtenc_encoder *e = (struct aptxbtenc_encoder *)enc;
+	const uint16_t *data = (uint16_t *)sonar_aptx;
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-	code[0] = 0x2301 + e->counter;
-	code[1] = 0x3201 + e->counter;
-#elif __BYTE_ORDER == __BIG_ENDIAN
-	code[0] = 0x0123 + e->counter;
-	code[1] = 0x0123 + e->counter;
-#else
-# error "Unknown byte order"
-#endif
+	code[0] = data[e->counter];
+	code[1] = data[e->counter + 1];
 
-	if (e->swap) {
-		code[0] = (code[0] << 8) | (code[0] >> 8);
-		code[1] = (code[1] << 8) | (code[1] >> 8);
-	}
+	e->counter += 2;
+	if (e->counter * sizeof(*data) >= sonar_aptx_len)
+		e->counter = 0;
 
-	e->counter++;
 	return 0;
 }
 
@@ -66,4 +72,15 @@ size_t SizeofAptxbtenc(void) {
 APTXENC NewAptxEnc(bool swap) {
 	aptxbtenc_init(&encoder, swap);
 	return &encoder;
+}
+
+APTXENC aptxbtenc_init2(bool swap) {
+	struct aptxbtenc_encoder *e;
+	if ((e = malloc(SizeofAptxbtenc())) != NULL)
+		aptxbtenc_init(e, swap);
+	return e;
+}
+
+void aptxbtenc_free(APTXENC enc) {
+	free(enc);
 }

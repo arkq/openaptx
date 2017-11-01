@@ -82,6 +82,26 @@ size_t SizeofAptxbtenc(void);
  *   encoder structure. Do not pass this handler to the free() function. */
 APTXENC NewAptxEnc(bool swap);
 
+/**
+ * Allocate and initialize encoder structure.
+ *
+ * @note
+ * This function is not available in the apt-X™ encoder library.
+ *
+ * @param swap Swap byte order of the output codeword.
+ * @return On success encoder handler is returned, otherwise NULL. Returned
+ *   handler shall be freed with the aptxbtenc_free(). */
+APTXENC aptxbtenc_init2(bool swap);
+
+/**
+ * Free resources allocated by the aptxbtenc_init2().
+ *
+ * @note
+ * This function is not available in the apt-X™ encoder library.
+ *
+ * @param enc Apt-X encoder handler. */
+void aptxbtenc_free(APTXENC enc);
+
 #ifdef __cplusplus
 }
 #endif
