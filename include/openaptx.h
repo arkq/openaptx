@@ -46,12 +46,22 @@ int aptxbtenc_init(
 		bool swap);
 
 /**
+ * Initialize encoder structure (HD variant).
+ *
+ * @param enc Apt-X encoder handler.
+ * @param swap Swap byte order of the output codeword.
+ * @return On success 0 is returned. */
+int aptxhdbtenc_init(
+		APTXENC enc,
+		bool swap);
+
+/**
  * Encode stereo PCM data.
  *
  * @param enc Initialized encoder handler.
- * @param pcmL Four 24-byte audio samples for left channel.
- * @param pcmR Four 24-byte audio samples for right channel.
- * @param code Two 16-byte codewords with auto-sync inserted.
+ * @param pcmL Four 24-bite audio samples for left channel.
+ * @param pcmR Four 24-bite audio samples for right channel.
+ * @param code Two 16-bite codewords with auto-sync inserted.
  * @return On success 0 is returned. */
 int aptxbtenc_encodestereo(
 		APTXENC enc,
@@ -60,16 +70,43 @@ int aptxbtenc_encodestereo(
 		uint16_t code[2]);
 
 /**
+ * Encode stereo PCM data (HD variant).
+ *
+ * @param enc Initialized encoder handler.
+ * @param pcmL Four 24-bite audio samples for left channel.
+ * @param pcmR Four 24-bite audio samples for right channel.
+ * @param code Two 24-bite codewords with auto-sync inserted.
+ * @return On success 0 is returned. */
+int aptxhdbtenc_encodestereo(
+		APTXENC enc,
+		const int32_t pcmL[4],
+		const int32_t pcmR[4],
+		uint32_t code[2]);
+
+/**
  * Library build name. */
 const char *aptxbtenc_build(void);
+
+/**
+ * Library build name (HD variant). */
+const char *aptxhdbtenc_build(void);
 
 /**
  * Library version number. */
 const char *aptxbtenc_version(void);
 
 /**
+ * Library version number (HD variant). */
+const char *aptxhdbtenc_version(void);
+
+
+/**
  * Get the size of the encoder structure. */
 size_t SizeofAptxbtenc(void);
+
+/**
+ * Get the size of the encoder structure (HD variant). */
+size_t SizeofAptxhdbtenc(void);
 
 /**
  * Get initialized encoder structure.
@@ -81,6 +118,17 @@ size_t SizeofAptxbtenc(void);
  * @return This function returns an address to the statically allocated
  *   encoder structure. Do not pass this handler to the free() function. */
 APTXENC NewAptxEnc(bool swap);
+
+/**
+ * Get initialized encoder structure (HD variant).
+ *
+ * @note
+ * This function is NOT thread-safe.
+ *
+ * @param swap Swap byte order of the output codeword.
+ * @return This function returns an address to the statically allocated
+ *   encoder structure. Do not pass this handler to the free() function. */
+APTXENC NewAptxhdEnc(bool swap);
 
 /**
  * Allocate and initialize encoder structure.
