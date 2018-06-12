@@ -1,6 +1,6 @@
 /*
  * [open]aptx - aptx-encode.c
- * Copyright (c) 2017 Arkadiusz Bokowy
+ * Copyright (c) 2017-2018 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -68,7 +68,12 @@ usage:
 	int channels = 0;
 	size_t i;
 
+#if APTXHD
+	enc = NewAptxhdEnc(__BYTE_ORDER == __LITTLE_ENDIAN);
+#else
 	enc = NewAptxEnc(__BYTE_ORDER == __LITTLE_ENDIAN);
+#endif
+
 	read_pcm(argv[optind], &pcm, &samples, &channels);
 
 	if (channels != 2) {
@@ -86,10 +91,24 @@ usage:
 
 		int32_t pcmL[4] = { pcm[i + 0], pcm[i + 2], pcm[i + 4], pcm[i + 6] };
 		int32_t pcmR[4] = { pcm[i + 1], pcm[i + 3], pcm[i + 5], pcm[i + 7] };
-		uint16_t code[2];
 
+#if APTXHD
+
+		uint32_t code[2];
+		aptxhdbtenc_encodestereo(enc, pcmL, pcmR, code);
+
+		uint8_t data[6] = {
+			((uint8_t *)code)[0], ((uint8_t *)code)[1], ((uint8_t *)code)[2],
+			((uint8_t *)code)[4], ((uint8_t *)code)[5], ((uint8_t *)code)[6] };
+		fwrite(data, sizeof(data), 1, f);
+
+#else
+
+		uint16_t code[2];
 		aptxbtenc_encodestereo(enc, pcmL, pcmR, code);
 		fwrite(code, sizeof(code), 1, f);
+
+#endif
 
 	}
 
