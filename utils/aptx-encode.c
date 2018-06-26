@@ -8,16 +8,26 @@
  *
  */
 
+#if HAVE_CONFIG_H
+# include "config.h"
+#endif
+
 #include <errno.h>
 #include <getopt.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <sndfile.h>
+#if WITH_SNDFILE
+# include <sndfile.h>
+#endif
+
 #include "openaptx.h"
 
 
 static void read_pcm(const char *path, int16_t **pcm, size_t *samples, int *channels) {
+
+#if WITH_SNDFILE
 
 	SNDFILE *sf;
 	SF_INFO info = {
@@ -27,20 +37,45 @@ static void read_pcm(const char *path, int16_t **pcm, size_t *samples, int *chan
 	};
 
 	if ((sf = sf_open(path, SFM_READ, &info)) == NULL) {
-		fprintf(stderr, "Read PCM: %s\n", sf_strerror(sf));
-		exit(1);
-	}
-
-	if ((*pcm = malloc(sizeof(*pcm) * info.frames * info.channels)) == NULL) {
-		fprintf(stderr, "Read PCM: %s\n", strerror(ENOMEM));
+		fprintf(stderr, "Open audio file: %s\n", sf_strerror(sf));
 		exit(1);
 	}
 
 	*samples = info.frames;
 	*channels = info.channels;
 
+#else
+
+	FILE *f;
+
+	if ((f = fopen(path, "rb")) == NULL) {
+		fprintf(stderr, "Open audio file: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	fseek(f, 0, SEEK_END);
+	size_t len = ftell(f);
+	rewind(f);
+
+	fprintf(stderr, "Assuming RAW format: 2-channels S16 LE\n");
+	*samples = len / sizeof(*pcm) / 2;
+	*channels = 2;
+
+#endif
+
+	if ((*pcm = malloc(sizeof(*pcm) * *samples * *channels)) == NULL) {
+		fprintf(stderr, "Read PCM: %s\n", strerror(ENOMEM));
+		exit(1);
+	}
+
+#if WITH_SNDFILE
 	sf_read_short(sf, *pcm, info.frames * info.channels);
 	sf_close(sf);
+#else
+	fread(*pcm, 1, len, f);
+	fclose(f);
+#endif
+
 }
 
 int main(int argc, char *argv[]) {
@@ -50,7 +85,11 @@ int main(int argc, char *argv[]) {
 	while ((opt = getopt(argc, argv, "h")) != -1)
 		switch (opt) {
 		case 'h':
-			printf("usage: %s <input.wav> <output.aptx>\n", argv[0]);
+#if WITH_SNDFILE
+			printf("usage: %s <input file> <output.aptx>\n", argv[0]);
+#else
+			printf("usage: %s <input.raw> <output.aptx>\n", argv[0]);
+#endif
 			return EXIT_SUCCESS;
 		default:
 usage:
