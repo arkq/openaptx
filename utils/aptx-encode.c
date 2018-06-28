@@ -25,15 +25,13 @@
 #include "openaptx.h"
 
 
-static void read_pcm(const char *path, int16_t **pcm, size_t *samples, int *channels) {
+static void read_pcm(const char *path, int16_t **pcm, size_t *frames, int *channels) {
 
 #if WITH_SNDFILE
 
 	SNDFILE *sf;
 	SF_INFO info = {
 		.format = 0,
-		.frames = *samples,
-		.channels = *channels,
 	};
 
 	if ((sf = sf_open(path, SFM_READ, &info)) == NULL) {
@@ -41,7 +39,7 @@ static void read_pcm(const char *path, int16_t **pcm, size_t *samples, int *chan
 		exit(1);
 	}
 
-	*samples = info.frames;
+	*frames = info.frames;
 	*channels = info.channels;
 
 #else
@@ -58,18 +56,18 @@ static void read_pcm(const char *path, int16_t **pcm, size_t *samples, int *chan
 	rewind(f);
 
 	fprintf(stderr, "Assuming RAW format: 2-channels S16 LE\n");
-	*samples = len / sizeof(*pcm) / 2;
+	*frames = len / sizeof(*pcm);
 	*channels = 2;
 
 #endif
 
-	if ((*pcm = malloc(sizeof(*pcm) * *samples * *channels)) == NULL) {
+	if ((*pcm = malloc(sizeof(*pcm) * *frames)) == NULL) {
 		fprintf(stderr, "Read PCM: %s\n", strerror(ENOMEM));
 		exit(1);
 	}
 
 #if WITH_SNDFILE
-	sf_read_short(sf, *pcm, info.frames * info.channels);
+	sf_readf_short(sf, *pcm, info.frames);
 	sf_close(sf);
 #else
 	fread(*pcm, 1, len, f);
@@ -103,7 +101,7 @@ usage:
 	APTXENC enc;
 	FILE *f;
 	int16_t *pcm;
-	size_t samples = 0;
+	size_t frames = 0;
 	int channels = 0;
 	size_t i;
 
@@ -113,7 +111,7 @@ usage:
 	enc = NewAptxEnc(__BYTE_ORDER == __LITTLE_ENDIAN);
 #endif
 
-	read_pcm(argv[optind], &pcm, &samples, &channels);
+	read_pcm(argv[optind], &pcm, &frames, &channels);
 
 	if (channels != 2) {
 		fprintf(stderr, "Unsupported number of channels: %d != %d\n", channels, 2);
@@ -125,8 +123,8 @@ usage:
 		exit(1);
 	}
 
-	samples = (size_t)(samples / 4) * 4;
-	for (i = 0; i < samples; i += 4 * 2) {
+	frames = (size_t)(frames / 4) * 4;
+	for (i = 0; i < frames * channels; i += 4 * 2) {
 
 		int32_t pcmL[4] = { pcm[i + 0], pcm[i + 2], pcm[i + 4], pcm[i + 6] };
 		int32_t pcmR[4] = { pcm[i + 1], pcm[i + 3], pcm[i + 5], pcm[i + 7] };
@@ -139,13 +137,13 @@ usage:
 		uint8_t data[6] = {
 			((uint8_t *)code)[0], ((uint8_t *)code)[1], ((uint8_t *)code)[2],
 			((uint8_t *)code)[4], ((uint8_t *)code)[5], ((uint8_t *)code)[6] };
-		fwrite(data, sizeof(data), 1, f);
+		fwrite(data, sizeof(*data), 6, f);
 
 #else
 
 		uint16_t code[2];
 		aptxbtenc_encodestereo(enc, pcmL, pcmR, code);
-		fwrite(code, sizeof(code), 1, f);
+		fwrite(code, sizeof(*code), 2, f);
 
 #endif
 
