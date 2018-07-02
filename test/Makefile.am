@@ -1,10 +1,13 @@
 # [open]aptx - Makefile.am
-# Copyright (c) 2017 Arkadiusz Bokowy
+# Copyright (c) 2017-2018 Arkadiusz Bokowy
 
 AM_CFLAGS = -I$(top_srcdir)/include
 
-check_PROGRAMS = \
-	heval422
+check_PROGRAMS =
+
+if ENABLE_APTX422
+check_PROGRAMS += heval422
+endif
 
 heval422_LDADD = \
 	$(top_builddir)/libbt-aptX-x86-4.2.2.so
