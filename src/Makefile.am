@@ -5,18 +5,22 @@ AM_CFLAGS = -I$(top_srcdir)/include
 AM_LDFLAGS = -avoid-version
 
 lib_LTLIBRARIES = \
-	libbt-aptx.la
+	libaptx.la \
+	libaptxHD.la
 
 if ENABLE_APTX422
-lib_LTLIBRARIES += libbt-aptx422.la
+lib_LTLIBRARIES += libaptx422.la
 endif
 
-libbt_aptx_la_SOURCES = \
-	bt-aptx-stub-sonar.c \
-	bt-aptx-stub-sonar-hd.c \
-	bt-aptx-stub.c
+libaptx_la_SOURCES = \
+	sample-sonar.c \
+	stub-aptx.c
 
-libbt_aptx422_la_SOURCES = \
+libaptxHD_la_SOURCES = \
+	sample-sonar-hd.c \
+	stub-aptxhd.c
+
+libaptx422_la_SOURCES = \
 	aptx422/encode.c \
 	aptx422/params.c \
 	aptx422/processor.c \
@@ -25,12 +29,12 @@ libbt_aptx422_la_SOURCES = \
 	aptx422/search.c \
 	aptx422.c
 
-bt-aptx-stub-sonar.c: $(srcdir)/sample/sonar.aptx
+sample-sonar.c: $(srcdir)/sample/sonar.aptx
 	echo " \
 		unsigned char sonar_aptx[] = { `xxd -i < $<` }; \
 		unsigned int sonar_aptx_len = sizeof(sonar_aptx);" >$@
 
-bt-aptx-stub-sonar-hd.c: $(srcdir)/sample/sonar.aptxhd
+sample-sonar-hd.c: $(srcdir)/sample/sonar.aptxhd
 	echo " \
 		unsigned char sonar_aptxhd[] = { `xxd -i < $<` }; \
 		unsigned int sonar_aptxhd_len = sizeof(sonar_aptxhd);" >$@

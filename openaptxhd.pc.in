@@ -3,8 +3,8 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: libaptx
+Name: libaptxHD
 Description: Reverse-engineered apt-X header file and library stub
 Version: @VERSION@
-Libs: -L${libdir} -laptx
+Libs: -L${libdir} -laptxHD
 Cflags: -I${includedir}

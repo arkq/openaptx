@@ -29,6 +29,7 @@ AM_COND_IF([WITH_SNDFILE], [
 
 AC_CONFIG_FILES([
 	openaptx.pc
+	openaptxhd.pc
 	src/Makefile
 	test/Makefile
 	utils/Makefile
