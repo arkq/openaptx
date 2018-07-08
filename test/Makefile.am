@@ -18,5 +18,5 @@ heval422_SOURCES = \
 	../src/aptx422/qmf.c \
 	../src/aptx422/quantizer.c \
 	../src/aptx422/search.c \
-	../src/inspect422.c \
+	inspect422.c \
 	heval422.c

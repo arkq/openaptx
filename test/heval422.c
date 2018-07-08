@@ -1,6 +1,6 @@
 /*
  * [open]aptx - heval422.c
- * Copyright (c) 2017 Arkadiusz Bokowy
+ * Copyright (c) 2017-2018 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -14,8 +14,8 @@
 #include <time.h>
 
 #include "aptx422.h"
+#include "inspect422.h"
 #include "openaptx.h"
-#include "../src/inspect422.h"
 
 #include "../src/aptx422/encode.h"
 #include "../src/aptx422/params.h"

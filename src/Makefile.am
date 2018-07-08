@@ -25,12 +25,12 @@ libbt_aptx422_la_SOURCES = \
 	aptx422/search.c \
 	aptx422.c
 
-bt-aptx-stub-sonar.c: $(srcdir)/sonar.aptx
+bt-aptx-stub-sonar.c: $(srcdir)/sample/sonar.aptx
 	echo " \
 		unsigned char sonar_aptx[] = { `xxd -i < $<` }; \
 		unsigned int sonar_aptx_len = sizeof(sonar_aptx);" >$@
 
-bt-aptx-stub-sonar-hd.c: $(srcdir)/sonar.aptxhd
+bt-aptx-stub-sonar-hd.c: $(srcdir)/sample/sonar.aptxhd
 	echo " \
 		unsigned char sonar_aptxhd[] = { `xxd -i < $<` }; \
 		unsigned int sonar_aptxhd_len = sizeof(sonar_aptxhd);" >$@
