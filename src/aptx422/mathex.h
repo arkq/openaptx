@@ -8,8 +8,8 @@
  *
  */
 
-#ifndef OPENAPTX_MATHEX_H_
-#define OPENAPTX_MATHEX_H_
+#ifndef OPENAPTX_APTX244_MATHEX_H_
+#define OPENAPTX_APTX244_MATHEX_H_
 
 #define INT24_MIN (-8388607-1)
 #define INT24_MAX (8388607)

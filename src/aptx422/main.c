@@ -1,5 +1,5 @@
 /*
- * [open]aptx - aptx422.c
+ * [open]aptx - main.c
  * Copyright (c) 2017 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
@@ -18,8 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "aptx422/encode.h"
-#include "aptx422/params.h"
+#include "encode.h"
+#include "params.h"
 
 static aptX_encoder_422 aptX_encoder;
 

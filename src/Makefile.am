@@ -27,7 +27,7 @@ libaptx422_la_SOURCES = \
 	aptx422/qmf.c \
 	aptx422/quantizer.c \
 	aptx422/search.c \
-	aptx422.c
+	aptx422/main.c
 
 sample-sonar.c: $(srcdir)/sample/sonar.aptx
 	echo " \

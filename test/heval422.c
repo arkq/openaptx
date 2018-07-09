@@ -24,7 +24,7 @@
 #include "../src/aptx422/quantizer.h"
 #include "../src/aptx422/search.h"
 #define aptxbtenc_encodestereo aptX_encode_stereo
-#include "../src/aptx422.c"
+#include "../src/aptx422/main.c"
 #undef aptxbtenc_encodestereo
 
 /* XXX: Heuristic evaluation of QMF convolution function requires library
