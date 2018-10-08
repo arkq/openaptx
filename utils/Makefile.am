@@ -22,4 +22,10 @@ aptx_encode_hd_CFLAGS = -DAPTXHD=1 $(AM_CFLAGS) @SNDFILE_CFLAGS@
 aptx_encode_hd_LDADD = $(LDADD) -laptxHD @SNDFILE_LIBS@
 
 bin_PROGRAMS += aptx-info
+aptx_info_SOURCES = aptx-info.c
 aptx_info_LDADD = $(LDADD) -laptx
+
+bin_PROGRAMS += aptx-info-hd
+aptx_info_hd_SOURCES = aptx-info.c
+aptx_info_hd_CFLAGS = -DAPTXHD=1 $(AM_CFLAGS)
+aptx_info_hd_LDADD = $(LDADD) -laptxHD
