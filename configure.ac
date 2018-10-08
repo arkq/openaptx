@@ -19,6 +19,13 @@ AM_COND_IF([ENABLE_APTX422], [
 	AC_DEFINE([ENABLE_APTX422], [1], [Define to 1 if aptx422 is enabled.])
 ])
 
+AC_ARG_ENABLE([aptxHD100],
+	[AS_HELP_STRING([--enable-aptxHD100], [build reverse-engineered library])])
+AM_CONDITIONAL([ENABLE_APTXHD100], [test "x$enable_aptxHD100" = "xyes"])
+AM_COND_IF([ENABLE_APTXHD100], [
+	AC_DEFINE([ENABLE_APTXHD100], [1], [Define to 1 if aptxHD100 is enabled.])
+])
+
 AC_ARG_WITH([sndfile],
 	[AS_HELP_STRING([--with-sndfile], [use sndfile for reading audio])])
 AM_CONDITIONAL([WITH_SNDFILE], [test "x$with_sndfile" = "xyes"])

@@ -1,5 +1,5 @@
 /*
- * [open]aptx - heval422.c
+ * heval-422.c
  * Copyright (c) 2017-2018 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
@@ -14,7 +14,7 @@
 #include <time.h>
 
 #include "aptx422.h"
-#include "inspect422.h"
+#include "inspect-422.h"
 #include "openaptx.h"
 
 #include "../src/aptx422/encode.h"
@@ -136,7 +136,7 @@ static int eval_BsearchLL(size_t nloops) {
 		if (o_new != o_422) {
 			printf("\n\ta: %u", a);
 			printf("\n\tx: %d", x);
-			printf("\n\tout: %ld != %zd", o_new, o_422);
+			printf("\n\tout: %zd != %zd", o_new, o_422);
 			printf("\n");
 			return -1;
 		}
@@ -162,7 +162,7 @@ static int eval_BsearchLH(size_t nloops) {
 		if (o_new != o_422) {
 			printf("\n\ta: %u", a);
 			printf("\n\tx: %d", x);
-			printf("\n\tout: %ld != %zd", o_new, o_422);
+			printf("\n\tout: %zd != %zd", o_new, o_422);
 			printf("\n");
 			return -1;
 		}
@@ -188,7 +188,7 @@ static int eval_BsearchHL(size_t nloops) {
 		if (o_new != o_422) {
 			printf("\n\ta: %u", a);
 			printf("\n\tx: %d", x);
-			printf("\n\tout: %ld != %zd", o_new, o_422);
+			printf("\n\tout: %zd != %zd", o_new, o_422);
 			printf("\n");
 			return -1;
 		}
@@ -214,7 +214,7 @@ static int eval_BsearchHH(size_t nloops) {
 		if (o_new != o_422) {
 			printf("\n\ta: %u", a);
 			printf("\n\tx: %d", x);
-			printf("\n\tout: %ld != %zd", o_new, o_422);
+			printf("\n\tout: %zd != %zd", o_new, o_422);
 			printf("\n");
 			return -1;
 		}

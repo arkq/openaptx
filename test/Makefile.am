@@ -9,8 +9,12 @@ if ENABLE_APTX422
 check_PROGRAMS += heval422
 endif
 
+if ENABLE_APTXHD100
+check_PROGRAMS += hevalhd100
+endif
+
 heval422_LDADD = \
-	$(top_builddir)/libbt-aptX-x86-4.2.2.so
+	$(top_srcdir)/aptx/libbt-aptX-x86-4.2.2.so
 heval422_SOURCES = \
 	../src/aptx422/encode.c \
 	../src/aptx422/params.c \
@@ -18,5 +22,11 @@ heval422_SOURCES = \
 	../src/aptx422/qmf.c \
 	../src/aptx422/quantizer.c \
 	../src/aptx422/search.c \
-	inspect422.c \
-	heval422.c
+	inspect-422.c \
+	heval-422.c
+
+hevalhd100_LDADD = \
+	$(top_srcdir)/aptx/libaptXHD-1.0.0-rel-Android21-ARMv7A.so
+hevalhd100_SOURCES = \
+	inspect-hd100.c \
+	heval-hd100.c

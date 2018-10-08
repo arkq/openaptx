@@ -12,6 +12,10 @@ if ENABLE_APTX422
 lib_LTLIBRARIES += libaptx422.la
 endif
 
+if ENABLE_APTXHD100
+lib_LTLIBRARIES += libaptxHD100.la
+endif
+
 libaptx_la_SOURCES = \
 	sample-sonar.c \
 	stub-aptx.c
@@ -28,6 +32,9 @@ libaptx422_la_SOURCES = \
 	aptx422/quantizer.c \
 	aptx422/search.c \
 	aptx422/main.c
+
+libaptxHD100_la_SOURCES = \
+	aptxhd100/main.c
 
 sample-sonar.c: $(srcdir)/sample/sonar.aptx
 	echo " \
