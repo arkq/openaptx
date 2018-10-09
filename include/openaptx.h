@@ -49,7 +49,9 @@ int aptxbtenc_init(
  * Initialize encoder structure (HD variant).
  *
  * @param enc Apt-X encoder handler.
- * @param swap Swap byte order of the output codeword.
+ * @param swap Swap byte order of the output codeword. DO NOT use it! It seems
+ *   that there is a bug in the library which messes up the output if swapping
+ *   is enabled.
  * @return On success 0 is returned. */
 int aptxhdbtenc_init(
 		APTXENC enc,
@@ -125,7 +127,9 @@ APTXENC NewAptxEnc(bool swap);
  * @note
  * This function is NOT thread-safe.
  *
- * @param swap Swap byte order of the output codeword.
+ * @param swap Swap byte order of the output codeword. DO NOT use it! It seems
+ *   that there is a bug in the library which messes up the output if swapping
+ *   is enabled.
  * @return This function returns an address to the statically allocated
  *   encoder structure. Do not pass this handler to the free() function. */
 APTXENC NewAptxhdEnc(bool swap);

@@ -106,7 +106,7 @@ usage:
 	size_t i;
 
 #if APTXHD
-	enc = NewAptxhdEnc(__BYTE_ORDER == __LITTLE_ENDIAN);
+	enc = NewAptxhdEnc(false);
 #else
 	enc = NewAptxEnc(__BYTE_ORDER == __LITTLE_ENDIAN);
 #endif
@@ -134,9 +134,11 @@ usage:
 		uint32_t code[2];
 		aptxhdbtenc_encodestereo(enc, pcmL, pcmR, code);
 
+		/* Due to a bug in the library we have to swap byte order by ourself... */
 		uint8_t data[6] = {
-			((uint8_t *)code)[0], ((uint8_t *)code)[1], ((uint8_t *)code)[2],
-			((uint8_t *)code)[4], ((uint8_t *)code)[5], ((uint8_t *)code)[6] };
+			((uint8_t *)code)[2], ((uint8_t *)code)[1], ((uint8_t *)code)[0],
+			((uint8_t *)code)[6], ((uint8_t *)code)[5], ((uint8_t *)code)[4] };
+
 		fwrite(data, sizeof(*data), 6, f);
 
 #else

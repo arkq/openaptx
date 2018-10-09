@@ -51,9 +51,10 @@ int aptxhdbtenc_encodestereo(
 	size_t i;
 	for (i = 0; i < 2; i++) {
 		uint8_t *p = (uint8_t *)&code[i];
-		p[0] = data[e->counter + i * 3 + 0];
+		p[0] = data[e->counter + i * 3 + 2];
 		p[1] = data[e->counter + i * 3 + 1];
-		p[2] = data[e->counter + i * 3 + 2];
+		p[2] = data[e->counter + i * 3 + 0];
+		p[3] = 0;
 	}
 
 	e->counter += 6;
