@@ -17,32 +17,32 @@
 extern "C" {
 #endif
 
-int32_t aptX_IQuant_log_table[32];
+extern int32_t aptX_IQuant_log_table[32];
 
-int32_t aptX_QMF_outer_coeffs[16];
-int32_t aptX_QMF_inner_coeffs[16];
+extern int32_t aptX_QMF_outer_coeffs[16];
+extern int32_t aptX_QMF_inner_coeffs[16];
 
-int32_t aptX_dq7bit16_sl1[65];
-int32_t aptX_dq7dith16_sf1[65];
-int32_t aptX_dq7mLamb16[65];
-int32_t aptX_q7incr16[65];
+extern int32_t aptX_dq7bit16_sl1[65];
+extern int32_t aptX_dq7dith16_sf1[65];
+extern int32_t aptX_dq7mLamb16[65];
+extern int32_t aptX_q7incr16[65];
 
-int32_t aptX_dq4bit16_sl1[9];
-int32_t aptX_dq4dith16_sf1[9];
-int32_t aptX_dq4mLamb16[9];
-int32_t aptX_q4incr16[9];
+extern int32_t aptX_dq4bit16_sl1[9];
+extern int32_t aptX_dq4dith16_sf1[9];
+extern int32_t aptX_dq4mLamb16[9];
+extern int32_t aptX_q4incr16[9];
 
-int32_t aptX_dq2bit16_sl1[3];
-int32_t aptX_dq2dith16_sf1[3];
-int32_t aptX_dq2mLamb16[3];
-int32_t aptX_q2incr16[3];
+extern int32_t aptX_dq3bit16_sl1[5];
+extern int32_t aptX_dq3dith16_sf1[5];
+extern int32_t aptX_dq3mLamb16[5];
+extern int32_t aptX_q3incr16[5];
 
-int32_t aptX_dq3bit16_sl1[5];
-int32_t aptX_dq3dith16_sf1[5];
-int32_t aptX_dq3mLamb16[5];
-int32_t aptX_q3incr16[5];
+extern int32_t aptX_dq2bit16_sl1[3];
+extern int32_t aptX_dq2dith16_sf1[3];
+extern int32_t aptX_dq2mLamb16[3];
+extern int32_t aptX_q2incr16[3];
 
-aptX_subband_params_422 aptX_params_422[__APTX_SUBBAND_MAX];
+extern aptX_subband_params_422 aptX_params_422[__APTX_SUBBAND_MAX];
 
 #ifdef __cplusplus
 }

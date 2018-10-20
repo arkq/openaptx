@@ -34,6 +34,7 @@ libaptx422_la_SOURCES = \
 	aptx422/main.c
 
 libaptxHD100_la_SOURCES = \
+	aptxhd100/params.c \
 	aptxhd100/main.c
 
 sample-sonar.c: $(srcdir)/sample/sonar.aptx
