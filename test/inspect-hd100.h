@@ -13,11 +13,6 @@
 
 #include "aptxHD100.h"
 
-int aptXHD_mem_cmp(
-		const char *label,
-		const void *a,
-		const void *b,
-		size_t n);
 int aptXHD_prediction_filter_100_cmp(
 		const char *label,
 		const aptXHD_prediction_filter_100 *a,

@@ -131,6 +131,7 @@ void quantiseDifferenceHH(int32_t diff, int32_t dither, int32_t c, aptX_quantize
 void aptxEncode(int32_t pcm[4], aptX_QMF_analyzer_422 *a, aptX_subband_encoder_422 *e);
 void insertSync(aptX_subband_encoder_422 *e1, aptX_subband_encoder_422 *e2, int32_t *sync);
 void invertQuantisation(int32_t a, int32_t dither, aptX_inverter_422 *i);
+void invertQuantisationHL(int32_t a, int32_t dither, aptX_inverter_422 *i);
 void performPredictionFiltering(int32_t a, aptX_prediction_filter_422 *f);
 void performPredictionFilteringLL(int32_t a, aptX_prediction_filter_422 *f);
 void performPredictionFilteringHL(int32_t a, aptX_prediction_filter_422 *f);

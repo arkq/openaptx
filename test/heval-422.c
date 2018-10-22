@@ -15,6 +15,7 @@
 
 #include "aptx422.h"
 #include "inspect-422.h"
+#include "inspect-utils.h"
 #include "openaptx.h"
 
 #include "../src/aptx422/encode.h"
@@ -23,31 +24,53 @@
 #include "../src/aptx422/qmf.h"
 #include "../src/aptx422/quantizer.h"
 #include "../src/aptx422/search.h"
+
+#define aptxbtenc_init aptX_init
 #define aptxbtenc_encodestereo aptX_encode_stereo
 #include "../src/aptx422/main.c"
+#undef aptxbtenc_init
 #undef aptxbtenc_encodestereo
 
-/* XXX: Heuristic evaluation of QMF convolution function requires library
- *      local symbols. Hence, the usage of GDB is inevitable. */
-typedef void (*AsmQmfConvO_t)(const int16_t a1[16], const int16_t a2[16], const int32_t coef[16], int32_t *out);
-typedef void (*AsmQmfConvI_t)(const int32_t a1[16], const int32_t a2[16], const int32_t coef[16], int32_t *out);
-AsmQmfConvO_t AsmQmfConvO_ = NULL;
-AsmQmfConvI_t AsmQmfConvI_ = NULL;
+static const char *getSubbandName(enum aptX_subband sb) {
+	switch (sb) {
+	case APTX_SUBBAND_LL:
+		return "LL";
+	case APTX_SUBBAND_LH:
+		return "LH";
+	case APTX_SUBBAND_HL:
+		return "HL";
+	case APTX_SUBBAND_HH:
+		return "HH";
+	default:
+		return "";
+	}
+}
 
-typedef void (*quantiseDifference_t)(int32_t diff, int32_t dither, int32_t c, aptX_quantizer_422 *q);
-quantiseDifference_t quantiseDifferenceLL_ = NULL;
-quantiseDifference_t quantiseDifferenceLH_ = NULL;
+static int eval_init(size_t nloops) {
+	fprintf(stderr, "%s: ", __func__);
 
-typedef void (*aptxEncode_t)(int32_t pcm[4], aptX_QMF_analyzer_422 *a, aptX_subband_encoder_422 *e);
-aptxEncode_t aptxEncode_ = NULL;
+	while (nloops--) {
+
+		aptX_encoder_422 enc_422 = { 0 };
+		aptX_encoder_422 enc_new = { 0 };
+
+		int swap = rand() > (RAND_MAX / 2);
+		aptxbtenc_init(&enc_422, swap);
+		aptX_init(&enc_new, swap);
+
+		if (aptX_encoder_422_cmp("\tenc", &enc_new, &enc_422)) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
+			return -1;
+		}
+
+	}
+
+	fprintf(stderr, "OK\n");
+	return 0;
+}
 
 static int eval_AsmQmfConvO(size_t nloops) {
-	printf("%s: ", __func__);
-
-	if (AsmQmfConvO_ == NULL) {
-		printf("Cannot evaluate! Missing symbol.\n");
-		return -1;
-	}
+	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
 	size_t i;
@@ -67,27 +90,22 @@ static int eval_AsmQmfConvO(size_t nloops) {
 		for (i = 0; i < sizeof(a2) / sizeof(*a2); i++)
 			a2[i] = rand();
 
-		AsmQmfConvO_(&a1[15], a2, coef, out_422);
+		AsmQmfConvO(&a1[15], a2, coef, out_422);
 		aptX_QMF_conv_outer(&a1[15], a2, &out_new[0], &out_new[2]);
 
-		if (aptX_mem_cmp("\tout", out_new, out_422, sizeof(out_422))) {
-			printf("Failed.\n");
+		if (diffmem("\tout", out_new, out_422, sizeof(out_422))) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
 static int eval_AsmQmfConvI(size_t nloops) {
-	printf("%s: ", __func__);
-
-	if (AsmQmfConvI_ == NULL) {
-		printf("Cannot evaluate! Missing symbol.\n");
-		return -1;
-	}
+	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
 	size_t i;
@@ -107,22 +125,22 @@ static int eval_AsmQmfConvI(size_t nloops) {
 		for (i = 0; i < sizeof(a2) / sizeof(*a2); i++)
 			a2[i] = rand();
 
-		AsmQmfConvI_(&a1[15], a2, coef, out_422);
+		AsmQmfConvI(&a1[15], a2, coef, out_422);
 		aptX_QMF_conv_inner(&a1[15], a2, &out_new[0], &out_new[1]);
 
-		if (aptX_mem_cmp("\tout", out_new, out_422, sizeof(out_422))) {
-			printf("Failed.\n");
+		if (diffmem("\tout", out_new, out_422, sizeof(out_422))) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
-static int eval_BsearchLL(size_t nloops) {
-	printf("%s: ", __func__);
+static int eval_Bsearch(enum aptX_subband sb, size_t nloops) {
+	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	while (nloops--) {
 
@@ -130,103 +148,46 @@ static int eval_BsearchLL(size_t nloops) {
 		int32_t x = rand();
 		size_t o_422, o_new;
 
-		o_422 = BsearchLL(a, x, aptX_dq7bit16_sl1);
-		o_new = aptX_search_LL(a, x, aptX_dq7bit16_sl1);
+		switch (sb) {
+#if 0
+		case APTX_SUBBAND_LL:
+			o_422 = BsearchLL(a, x, aptX_dq7bit16_sl1);
+			o_new = aptX_search_LL(a, x, aptX_dq7bit16_sl1);
+			break;
+#endif
+		case APTX_SUBBAND_LH:
+			o_422 = BsearchLH(a, x, aptX_dq4bit16_sl1);
+			o_new = aptX_search_LH(a, x, aptX_dq4bit16_sl1);
+			break;
+		case APTX_SUBBAND_HL:
+			o_422 = BsearchHL(a, x, aptX_dq2bit16_sl1);
+			o_new = aptX_search_HL(a, x, aptX_dq2bit16_sl1);
+			break;
+		case APTX_SUBBAND_HH:
+			o_422 = BsearchHH(a, x, aptX_dq3bit16_sl1);
+			o_new = aptX_search_HH(a, x, aptX_dq3bit16_sl1);
+			break;
+		default:
+			fprintf(stderr, "%s sub-band function not available\n", getSubbandName(sb));
+			return -1;
+		}
 
 		if (o_new != o_422) {
-			printf("\n\ta: %u", a);
-			printf("\n\tx: %d", x);
-			printf("\n\tout: %zd != %zd", o_new, o_422);
-			printf("\n");
+			fprintf(stderr, "\n\ta: %u", a);
+			fprintf(stderr, "\n\tx: %d", x);
+			fprintf(stderr, "\n\tout: %zd != %zd", o_new, o_422);
+			fprintf(stderr, "\n");
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
-	return 0;
-}
-
-static int eval_BsearchLH(size_t nloops) {
-	printf("%s: ", __func__);
-
-	while (nloops--) {
-
-		int32_t a = rand();
-		int32_t x = rand();
-		size_t o_422, o_new;
-
-		o_422 = BsearchLH(a, x, aptX_dq4bit16_sl1);
-		o_new = aptX_search_LH(a, x, aptX_dq4bit16_sl1);
-
-		if (o_new != o_422) {
-			printf("\n\ta: %u", a);
-			printf("\n\tx: %d", x);
-			printf("\n\tout: %zd != %zd", o_new, o_422);
-			printf("\n");
-			return -1;
-		}
-
-	}
-
-	printf("OK\n");
-	return 0;
-}
-
-static int eval_BsearchHL(size_t nloops) {
-	printf("%s: ", __func__);
-
-	while (nloops--) {
-
-		int32_t a = rand();
-		int32_t x = rand();
-		size_t o_422, o_new;
-
-		o_422 = BsearchHL(a, x, aptX_dq2bit16_sl1);
-		o_new = aptX_search_HL(a, x, aptX_dq2bit16_sl1);
-
-		if (o_new != o_422) {
-			printf("\n\ta: %u", a);
-			printf("\n\tx: %d", x);
-			printf("\n\tout: %zd != %zd", o_new, o_422);
-			printf("\n");
-			return -1;
-		}
-
-	}
-
-	printf("OK\n");
-	return 0;
-}
-
-static int eval_BsearchHH(size_t nloops) {
-	printf("%s: ", __func__);
-
-	while (nloops--) {
-
-		int32_t a = rand();
-		int32_t x = rand();
-		size_t o_422, o_new;
-
-		o_422 = BsearchHH(a, x, aptX_dq3bit16_sl1);
-		o_new = aptX_search_HH(a, x, aptX_dq3bit16_sl1);
-
-		if (o_new != o_422) {
-			printf("\n\ta: %u", a);
-			printf("\n\tx: %d", x);
-			printf("\n\tout: %zd != %zd", o_new, o_422);
-			printf("\n");
-			return -1;
-		}
-
-	}
-
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
 static int eval_packCodeword(size_t nloops) {
-	printf("%s: ", __func__);
+	fprintf(stderr, "%s: ", __func__);
 
 	while (nloops--) {
 
@@ -241,31 +202,26 @@ static int eval_packCodeword(size_t nloops) {
 		uint16_t o_new = aptX_pack_codeword(&e);
 
 		if (o_new != o_422) {
-			printf("\n\tdither_sign: %d", e.dither_sign);
-			printf("\n\tout: %x != %x", o_new, o_422);
-			printf("\n");
+			fprintf(stderr, "\n\tdither_sign: %d", e.dither_sign);
+			fprintf(stderr, "\n\tout: %x != %x", o_new, o_422);
+			fprintf(stderr, "\n");
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
-static int eval_quantiseDifference(size_t nloops) {
-	printf("%s: ", __func__);
-
-	if (quantiseDifferenceLL_ == NULL) {
-		printf("Cannot evaluate! Missing symbol.\n");
-		return -1;
-	}
+static int eval_quantiseDifference(enum aptX_subband sb, size_t nloops) {
+	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	aptX_encoder_422 enc;
-	aptxbtenc_init(&enc, 0);
+	aptX_init(&enc, 0);
 
-	aptX_quantizer_422 *q_422 = &enc.encoder[0].quantizer[0];
-	aptX_quantizer_422 *q_new = &enc.encoder[1].quantizer[0];
+	aptX_quantizer_422 *q_422 = &enc.encoder[0].quantizer[sb];
+	aptX_quantizer_422 *q_new = &enc.encoder[1].quantizer[sb];
 
 	while (nloops--) {
 
@@ -273,30 +229,44 @@ static int eval_quantiseDifference(size_t nloops) {
 		int32_t dither = rand();
 		int32_t x = rand();
 
-		quantiseDifferenceLL_(diff, dither, x, q_422);
-		aptX_quantize_difference_LL(diff, dither, x, q_new);
+		switch (sb) {
+		case APTX_SUBBAND_LL:
+			quantiseDifferenceLL(diff, dither, x, q_422);
+			aptX_quantize_difference_LL(diff, dither, x, q_new);
+			break;
+		case APTX_SUBBAND_LH:
+			quantiseDifferenceLH(diff, dither, x, q_422);
+			aptX_quantize_difference_LH(diff, dither, x, q_new);
+			break;
+		case APTX_SUBBAND_HL:
+			quantiseDifferenceHL(diff, dither, x, q_422);
+			aptX_quantize_difference_HL(diff, dither, x, q_new);
+			break;
+		case APTX_SUBBAND_HH:
+			quantiseDifferenceHH(diff, dither, x, q_422);
+			aptX_quantize_difference_HH(diff, dither, x, q_new);
+			break;
+		default:
+			fprintf(stderr, "%s sub-band function not available\n", getSubbandName(sb));
+			return -1;
+		}
 
 		if (aptX_quantizer_422_cmp("\tquantizer", q_new, q_422)) {
-			printf("Failed.\n");
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
 static int eval_aptxEncode(size_t nloops) {
-	printf("%s: ", __func__);
-
-	if (aptxEncode_ == NULL) {
-		printf("Cannot evaluate! Missing symbol.\n");
-		return -1;
-	}
+	fprintf(stderr, "%s: ", __func__);
 
 	aptX_encoder_422 enc;
-	aptxbtenc_init(&enc, 0);
+	aptX_init(&enc, 0);
 
 	aptX_QMF_analyzer_422 *a_422 = &enc.analyzer[0];
 	aptX_QMF_analyzer_422 *a_new = &enc.analyzer[1];
@@ -307,31 +277,31 @@ static int eval_aptxEncode(size_t nloops) {
 
 		int32_t pcm[4] = { rand(), rand(), rand(), rand() };
 
-		aptxEncode_(pcm, a_422, e_422);
+		aptxEncode(pcm, a_422, e_422);
 		aptX_encode(pcm, a_new, e_new);
 
 		int ret = 0;
 		ret |= aptX_QMF_analyzer_422_cmp("\tanalyzer", a_new, a_422);
 		ret |= aptX_subband_encoder_422_cmp("\tencoder", e_new, e_422);
 		if (ret) {
-			printf("Failed.\n");
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
-static int eval_invertQuantisation(size_t nloops) {
-	printf("%s: ", __func__);
+static int eval_invertQuantisation(enum aptX_subband sb, size_t nloops) {
+	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	aptX_encoder_422 enc;
-	aptxbtenc_init(&enc, 0);
+	aptX_init(&enc, 0);
 
-	aptX_inverter_422 *i_422 = &enc.encoder[0].processor[0].inverter;
-	aptX_inverter_422 *i_new = &enc.encoder[1].processor[0].inverter;
+	aptX_inverter_422 *i_422 = &enc.encoder[0].processor[sb].inverter;
+	aptX_inverter_422 *i_new = &enc.encoder[1].processor[sb].inverter;
 
 	while (nloops--) {
 
@@ -339,57 +309,79 @@ static int eval_invertQuantisation(size_t nloops) {
 		int32_t a = rand() % 65;
 		int32_t dither = rand();
 
-		invertQuantisation(a, dither, i_422);
-		aptX_invert_quantization(a, dither, i_new);
+		switch (sb) {
+		case APTX_SUBBAND_LL:
+			invertQuantisation(a, dither, i_422);
+			aptX_invert_quantization(a, dither, i_new);
+			break;
+		case APTX_SUBBAND_HL:
+			invertQuantisationHL(a, dither, i_422);
+			aptX_invert_quantization(a, dither, i_new);
+			break;
+		default:
+			fprintf(stderr, "%s sub-band function not available\n", getSubbandName(sb));
+			return -1;
+		}
 
 		if (aptX_inverter_422_cmp("\tinverter", i_new, i_422)) {
-			printf("Failed.\n");
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
-static int eval_performPredictionFiltering(size_t nloops) {
-	printf("%s: ", __func__);
+static int eval_performPredictionFiltering(enum aptX_subband sb, size_t nloops) {
+	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	aptX_encoder_422 enc;
-	aptxbtenc_init(&enc, 0);
+	aptX_init(&enc, 0);
 
-	aptX_prediction_filter_422 *f_422 = &enc.encoder[0].processor[0].filter;
-	aptX_prediction_filter_422 *f_new = &enc.encoder[1].processor[0].filter;
+	aptX_prediction_filter_422 *f_422 = &enc.encoder[0].processor[sb].filter;
+	aptX_prediction_filter_422 *f_new = &enc.encoder[1].processor[sb].filter;
 
 	while (nloops--) {
 
 		int32_t a = rand();
 
-		performPredictionFilteringLL(a, f_422);
-		aptX_prediction_filtering(a, f_new);
+		switch (sb) {
+		case APTX_SUBBAND_LL:
+			performPredictionFilteringLL(a, f_422);
+			aptX_prediction_filtering(a, f_new);
+			break;
+		case APTX_SUBBAND_HL:
+			performPredictionFilteringHL(a, f_422);
+			aptX_prediction_filtering(a, f_new);
+			break;
+		default:
+			fprintf(stderr, "%s sub-band function not available\n", getSubbandName(sb));
+			return -1;
+		}
 
 		if (aptX_prediction_filter_422_cmp("\tfilter", f_new, f_422)) {
-			printf("Failed.\n");
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
-static int eval_processSubband(size_t nloops) {
-	printf("%s: ", __func__);
+static int eval_processSubband(enum aptX_subband sb, size_t nloops) {
+	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	aptX_encoder_422 enc;
-	aptxbtenc_init(&enc, 0);
+	aptX_init(&enc, 0);
 
-	aptX_prediction_filter_422 *f_422 = &enc.encoder[0].processor[0].filter;
-	aptX_prediction_filter_422 *f_new = &enc.encoder[1].processor[0].filter;
-	aptX_inverter_422 *i_422 = &enc.encoder[0].processor[0].inverter;
-	aptX_inverter_422 *i_new = &enc.encoder[1].processor[0].inverter;
+	aptX_prediction_filter_422 *f_422 = &enc.encoder[0].processor[sb].filter;
+	aptX_prediction_filter_422 *f_new = &enc.encoder[1].processor[sb].filter;
+	aptX_inverter_422 *i_422 = &enc.encoder[0].processor[sb].inverter;
+	aptX_inverter_422 *i_new = &enc.encoder[1].processor[sb].inverter;
 
 	while (nloops--) {
 
@@ -397,56 +389,67 @@ static int eval_processSubband(size_t nloops) {
 		int32_t a = rand() % 65;
 		int32_t dither = rand();
 
-		processSubbandLL(a, dither, f_422, i_422);
-		aptX_process_subband(a, dither, f_new, i_new);
+		switch (sb) {
+		case APTX_SUBBAND_LL:
+			processSubbandLL(a, dither, f_422, i_422);
+			aptX_process_subband(a, dither, f_new, i_new);
+			break;
+		case APTX_SUBBAND_HL:
+			processSubbandHL(a, dither, f_422, i_422);
+			aptX_process_subband(a, dither, f_new, i_new);
+			break;
+		default:
+			fprintf(stderr, "%s sub-band function not available\n", getSubbandName(sb));
+			return -1;
+		}
 
 		int ret = 0;
 		ret |= aptX_prediction_filter_422_cmp("\tfilter", f_new, f_422);
 		ret |= aptX_inverter_422_cmp("\tinverter", i_new, i_422);
 		if (ret) {
-			printf("Failed.\n");
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
 static int eval_insertSync(size_t nloops) {
-	printf("%s: ", __func__);
+	fprintf(stderr, "%s: ", __func__);
 
 	while (nloops--) {
 
-		/* aptX_subband_encoder_422 e1 = { 0 }; */
-		/* aptX_subband_encoder_422 e2 = { 0 }; */
+		aptX_subband_encoder_422 e1 = { 0 };
+		aptX_subband_encoder_422 e2 = { 0 };
 		int32_t o_422, o_new;
 
 		o_422 = o_new = rand();
 
-		/* insertSync(&e1, &e2, &o_422); */
-		/* aptX_insert_sync(&e1, &e2, &o_new); */
+		insertSync(&e1, &e2, &o_422);
+		aptX_insert_sync(&e1, &e2, &o_new);
 
 		if (o_new != o_422) {
-			printf("\n\tout: %x != %x", o_new, o_422);
-			printf("\n");
+			fprintf(stderr, "\n\tout: %x != %x", o_new, o_422);
+			fprintf(stderr, "\n");
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
 static aptX_encoder_422 enc_422;
 static aptX_encoder_422 enc_new;
 static int eval_aptxbtenc_encodestereo(size_t nloops) {
-	printf("%s: ", __func__);
+	fprintf(stderr, "%s: ", __func__);
 
-	aptxbtenc_init(&enc_422, 1);
-	aptxbtenc_init(&enc_new, 1);
+	aptX_init(&enc_422, 1);
+	aptX_init(&enc_new, 1);
 
 	while (nloops--) {
 
@@ -460,15 +463,15 @@ static int eval_aptxbtenc_encodestereo(size_t nloops) {
 
 		int ret = 0;
 		ret |= aptX_encoder_422_cmp("\tenc", &enc_new, &enc_422);
-		ret |= aptX_mem_cmp("\tcode", code_new, code_422, sizeof(code_new));
+		ret |= diffmem("\tcode", code_new, code_422, sizeof(code_new));
 		if (ret) {
-			printf("Failed.\n");
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			return -1;
 		}
 
 	}
 
-	printf("OK\n");
+	fprintf(stderr, "OK\n");
 	return 0;
 }
 
@@ -486,23 +489,29 @@ int main(int argc, char *argv[]) {
 		srand(atoi(argv[2]));
 	}
 	else {
-		printf("usage: %s [COUNT [SEED]]\n", argv[0]);
+		fprintf(stderr, "usage: %s [COUNT [SEED]]\n", argv[0]);
 		return -1;
 	}
 
-	printf("== HEURISTIC EVALUATION ==\n");
+	fprintf(stderr, "== HEURISTIC EVALUATION ==\n");
+	ret |= eval_init(count);
 	ret |= eval_AsmQmfConvO(count);
 	ret |= eval_AsmQmfConvI(count);
-	ret |= eval_BsearchLL(count);
-	ret |= eval_BsearchLH(count);
-	ret |= eval_BsearchHL(count);
-	ret |= eval_BsearchHH(count);
-	ret |= eval_quantiseDifference(count);
+	ret |= eval_Bsearch(APTX_SUBBAND_LH, count);
+	ret |= eval_Bsearch(APTX_SUBBAND_HL, count);
+	ret |= eval_Bsearch(APTX_SUBBAND_HH, count);
+	ret |= eval_quantiseDifference(APTX_SUBBAND_LL, count);
+	ret |= eval_quantiseDifference(APTX_SUBBAND_LH, count);
+	ret |= eval_quantiseDifference(APTX_SUBBAND_HL, count);
+	ret |= eval_quantiseDifference(APTX_SUBBAND_HH, count);
 	ret |= eval_aptxEncode(count);
 	ret |= eval_insertSync(count);
-	ret |= eval_invertQuantisation(count);
-	ret |= eval_performPredictionFiltering(count);
-	ret |= eval_processSubband(count);
+	ret |= eval_invertQuantisation(APTX_SUBBAND_LL, count);
+	ret |= eval_invertQuantisation(APTX_SUBBAND_HL, count);
+	ret |= eval_performPredictionFiltering(APTX_SUBBAND_LL, count);
+	ret |= eval_performPredictionFiltering(APTX_SUBBAND_HL, count);
+	ret |= eval_processSubband(APTX_SUBBAND_LL, count);
+	ret |= eval_processSubband(APTX_SUBBAND_HL, count);
 	ret |= eval_packCodeword(count);
 	ret |= eval_aptxbtenc_encodestereo(count);
 

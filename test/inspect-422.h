@@ -13,11 +13,6 @@
 
 #include "aptx422.h"
 
-int aptX_mem_cmp(
-		const char *label,
-		const void *a,
-		const void *b,
-		size_t n);
 int aptX_prediction_filter_422_cmp(
 		const char *label,
 		const aptX_prediction_filter_422 *a,
