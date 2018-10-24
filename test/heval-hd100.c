@@ -43,8 +43,15 @@ static const char *getSubbandName(enum aptXHD_subband sb) {
 	}
 }
 
-static int eval_init(size_t nloops) {
+static int eval_init(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
+
+	static const int param_sizes[4] = {
+		[APTXHD_SUBBAND_LL] = sizeof(aptXHD_q9incr16) / sizeof(*aptXHD_q9incr16),
+		[APTXHD_SUBBAND_LH] = sizeof(aptXHD_q6incr16) / sizeof(*aptXHD_q6incr16),
+		[APTXHD_SUBBAND_HL] = sizeof(aptXHD_q4incr16) / sizeof(*aptXHD_q4incr16),
+		[APTXHD_SUBBAND_HH] = sizeof(aptXHD_q5incr16) / sizeof(*aptXHD_q5incr16),
+	};
 
 	while (nloops--) {
 
@@ -55,9 +62,31 @@ static int eval_init(size_t nloops) {
 		aptxhdbtenc_init(&enc_100, swap);
 		aptXHD_init(&enc_new, swap);
 
-		if (aptXHD_encoder_100_cmp("\tenc", &enc_new, &enc_100)) {
+		int c, b, i, ret = 0;
+		for (c = 0; c < APTXHD_CHANNELS; c++)
+			for (b = 0; b < __APTXHD_SUBBAND_MAX; b++) {
+				for (i = 0; i < param_sizes[b]; i++)
+					ret |= diffint("bit16",
+						enc_new.encoder[c].processor[b].inverter.subband_param_bit16_sl1[i],
+						enc_100.encoder[c].processor[b].inverter.subband_param_bit16_sl1[i]);
+				for (i = 0; i < param_sizes[i]; i++)
+					ret |= diffint("dith16",
+						enc_new.encoder[c].processor[b].inverter.subband_param_dith16_sf1[i],
+						enc_100.encoder[c].processor[b].inverter.subband_param_dith16_sf1[i]);
+				for (i = 0; i < param_sizes[i]; i++)
+					ret |= diffint("mLamb16",
+						enc_new.encoder[c].quantizer[b].subband_param_mLamb16[i],
+						enc_100.encoder[c].quantizer[b].subband_param_mLamb16[i]);
+				for (i = 0; i < param_sizes[i]; i++)
+					ret |= diffint("incr16",
+						enc_new.encoder[c].processor[b].inverter.subband_param_incr16[i],
+						enc_100.encoder[c].processor[b].inverter.subband_param_incr16[i]);
+			}
+
+		if (aptXHD_encoder_100_cmp("\tenc", &enc_new, &enc_100) || ret) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -66,7 +95,7 @@ static int eval_init(size_t nloops) {
 	return 0;
 }
 
-static int eval_AsmQmfConvO(size_t nloops) {
+static int eval_AsmQmfConvO(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
@@ -92,7 +121,8 @@ static int eval_AsmQmfConvO(size_t nloops) {
 
 		if (diffmem("\tout", out_new, out_100, sizeof(out_100))) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -101,7 +131,7 @@ static int eval_AsmQmfConvO(size_t nloops) {
 	return 0;
 }
 
-static int eval_AsmQmfConvI(size_t nloops) {
+static int eval_AsmQmfConvI(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
@@ -127,7 +157,8 @@ static int eval_AsmQmfConvI(size_t nloops) {
 
 		if (diffmem("\tout", out_new, out_100, sizeof(out_100))) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -136,7 +167,7 @@ static int eval_AsmQmfConvI(size_t nloops) {
 	return 0;
 }
 
-static int eval_Bsearch(enum aptXHD_subband sb, size_t nloops) {
+static int eval_Bsearch(enum aptXHD_subband sb, size_t nloops, bool errstop) {
 	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	while (nloops--) {
@@ -155,12 +186,10 @@ static int eval_Bsearch(enum aptXHD_subband sb, size_t nloops) {
 			return -1;
 		}
 
-		if (o_new != o_100) {
-			fprintf(stderr, "\n\ta: %u", a);
-			fprintf(stderr, "\n\tx: %d", x);
-			fprintf(stderr, "\n\tout: %zd != %zd", o_new, o_100);
-			fprintf(stderr, "\n");
-			return -1;
+		if (diffint("\treturn", o_new, o_100)) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -171,27 +200,28 @@ static int eval_Bsearch(enum aptXHD_subband sb, size_t nloops) {
 
 int main(int argc, char *argv[]) {
 
-	size_t count;
-	int ret = 0;
+	bool errstop = true;
+	size_t nloops = 1;
 
-	if (argc == 2) {
-		count = atoi(argv[1]);
-		srand(time(NULL));
-	}
-	else if (argc == 3) {
-		count = atoi(argv[1]);
+	srand(time(NULL));
+
+	if (argc >= 2)
+		nloops = atoi(argv[1]);
+	if (argc >= 3)
 		srand(atoi(argv[2]));
-	}
-	else {
-		fprintf(stderr, "usage: %s [COUNT [SEED]]\n", argv[0]);
+	if (argc >= 4)
+		errstop = atoi(argv[3]);
+	if (argc >= 5) {
+		fprintf(stderr, "usage: %s [COUNT] [SEED] [STOP]\n", argv[0]);
 		return -1;
 	}
 
 	fprintf(stderr, "== HEURISTIC EVALUATION ==\n");
-	ret |= eval_init(count);
-	ret |= eval_AsmQmfConvO(count);
-	ret |= eval_AsmQmfConvI(count);
-	ret |= eval_Bsearch(APTXHD_SUBBAND_LH, count);
+
+	int ret = eval_init(nloops, errstop);
+	ret |= eval_AsmQmfConvO(nloops, errstop);
+	ret |= eval_AsmQmfConvI(nloops, errstop);
+	ret |= eval_Bsearch(APTXHD_SUBBAND_LH, nloops, errstop);
 
 	return ret;
 }

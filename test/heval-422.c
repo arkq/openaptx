@@ -46,7 +46,7 @@ static const char *getSubbandName(enum aptX_subband sb) {
 	}
 }
 
-static int eval_init(size_t nloops) {
+static int eval_init(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	while (nloops--) {
@@ -60,7 +60,8 @@ static int eval_init(size_t nloops) {
 
 		if (aptX_encoder_422_cmp("\tenc", &enc_new, &enc_422)) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -69,7 +70,7 @@ static int eval_init(size_t nloops) {
 	return 0;
 }
 
-static int eval_AsmQmfConvO(size_t nloops) {
+static int eval_AsmQmfConvO(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
@@ -95,7 +96,8 @@ static int eval_AsmQmfConvO(size_t nloops) {
 
 		if (diffmem("\tout", out_new, out_422, sizeof(out_422))) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -104,7 +106,7 @@ static int eval_AsmQmfConvO(size_t nloops) {
 	return 0;
 }
 
-static int eval_AsmQmfConvI(size_t nloops) {
+static int eval_AsmQmfConvI(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
@@ -130,7 +132,8 @@ static int eval_AsmQmfConvI(size_t nloops) {
 
 		if (diffmem("\tout", out_new, out_422, sizeof(out_422))) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -139,7 +142,7 @@ static int eval_AsmQmfConvI(size_t nloops) {
 	return 0;
 }
 
-static int eval_Bsearch(enum aptX_subband sb, size_t nloops) {
+static int eval_Bsearch(enum aptX_subband sb, size_t nloops, bool errstop) {
 	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	while (nloops--) {
@@ -172,12 +175,10 @@ static int eval_Bsearch(enum aptX_subband sb, size_t nloops) {
 			return -1;
 		}
 
-		if (o_new != o_422) {
-			fprintf(stderr, "\n\ta: %u", a);
-			fprintf(stderr, "\n\tx: %d", x);
-			fprintf(stderr, "\n\tout: %zd != %zd", o_new, o_422);
-			fprintf(stderr, "\n");
-			return -1;
+		if (diffint("\treturn", o_new, o_422)) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -186,7 +187,7 @@ static int eval_Bsearch(enum aptX_subband sb, size_t nloops) {
 	return 0;
 }
 
-static int eval_packCodeword(size_t nloops) {
+static int eval_packCodeword(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	while (nloops--) {
@@ -201,11 +202,10 @@ static int eval_packCodeword(size_t nloops) {
 		uint16_t o_422 = packCodeword(&e);
 		uint16_t o_new = aptX_pack_codeword(&e);
 
-		if (o_new != o_422) {
-			fprintf(stderr, "\n\tdither_sign: %d", e.dither_sign);
-			fprintf(stderr, "\n\tout: %x != %x", o_new, o_422);
-			fprintf(stderr, "\n");
-			return -1;
+		if (diffint("\tcodeword", o_new, o_422)) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -214,7 +214,7 @@ static int eval_packCodeword(size_t nloops) {
 	return 0;
 }
 
-static int eval_quantiseDifference(enum aptX_subband sb, size_t nloops) {
+static int eval_quantiseDifference(enum aptX_subband sb, size_t nloops, bool errstop) {
 	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	aptX_encoder_422 enc;
@@ -253,7 +253,9 @@ static int eval_quantiseDifference(enum aptX_subband sb, size_t nloops) {
 
 		if (aptX_quantizer_422_cmp("\tquantizer", q_new, q_422)) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
+			memcpy(q_new, q_422, sizeof(*q_new));
 		}
 
 	}
@@ -262,7 +264,7 @@ static int eval_quantiseDifference(enum aptX_subband sb, size_t nloops) {
 	return 0;
 }
 
-static int eval_aptxEncode(size_t nloops) {
+static int eval_aptxEncode(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	aptX_encoder_422 enc;
@@ -285,7 +287,10 @@ static int eval_aptxEncode(size_t nloops) {
 		ret |= aptX_subband_encoder_422_cmp("\tencoder", e_new, e_422);
 		if (ret) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
+			memcpy(a_new, a_422, sizeof(*a_new));
+			memcpy(e_new, e_422, sizeof(*e_new));
 		}
 
 	}
@@ -294,7 +299,7 @@ static int eval_aptxEncode(size_t nloops) {
 	return 0;
 }
 
-static int eval_invertQuantisation(enum aptX_subband sb, size_t nloops) {
+static int eval_invertQuantisation(enum aptX_subband sb, size_t nloops, bool errstop) {
 	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	aptX_encoder_422 enc;
@@ -325,7 +330,9 @@ static int eval_invertQuantisation(enum aptX_subband sb, size_t nloops) {
 
 		if (aptX_inverter_422_cmp("\tinverter", i_new, i_422)) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
+			memcpy(i_new, i_422, sizeof(*i_new));
 		}
 
 	}
@@ -334,7 +341,7 @@ static int eval_invertQuantisation(enum aptX_subband sb, size_t nloops) {
 	return 0;
 }
 
-static int eval_performPredictionFiltering(enum aptX_subband sb, size_t nloops) {
+static int eval_performPredictionFiltering(enum aptX_subband sb, size_t nloops, bool errstop) {
 	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	aptX_encoder_422 enc;
@@ -363,7 +370,9 @@ static int eval_performPredictionFiltering(enum aptX_subband sb, size_t nloops) 
 
 		if (aptX_prediction_filter_422_cmp("\tfilter", f_new, f_422)) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
+			memcpy(f_new, f_422, sizeof(*f_new));
 		}
 
 	}
@@ -372,7 +381,7 @@ static int eval_performPredictionFiltering(enum aptX_subband sb, size_t nloops) 
 	return 0;
 }
 
-static int eval_processSubband(enum aptX_subband sb, size_t nloops) {
+static int eval_processSubband(enum aptX_subband sb, size_t nloops, bool errstop) {
 	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
 
 	aptX_encoder_422 enc;
@@ -408,7 +417,10 @@ static int eval_processSubband(enum aptX_subband sb, size_t nloops) {
 		ret |= aptX_inverter_422_cmp("\tinverter", i_new, i_422);
 		if (ret) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
+			memcpy(f_new, f_422, sizeof(*f_new));
+			memcpy(i_new, i_422, sizeof(*i_new));
 		}
 
 	}
@@ -417,7 +429,7 @@ static int eval_processSubband(enum aptX_subband sb, size_t nloops) {
 	return 0;
 }
 
-static int eval_insertSync(size_t nloops) {
+static int eval_insertSync(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	while (nloops--) {
@@ -431,10 +443,10 @@ static int eval_insertSync(size_t nloops) {
 		insertSync(&e1, &e2, &o_422);
 		aptX_insert_sync(&e1, &e2, &o_new);
 
-		if (o_new != o_422) {
-			fprintf(stderr, "\n\tout: %x != %x", o_new, o_422);
-			fprintf(stderr, "\n");
-			return -1;
+		if (diffint("\tsync", o_new, o_422)) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
+			if (errstop)
+				return -1;
 		}
 
 	}
@@ -445,7 +457,7 @@ static int eval_insertSync(size_t nloops) {
 
 static aptX_encoder_422 enc_422;
 static aptX_encoder_422 enc_new;
-static int eval_aptxbtenc_encodestereo(size_t nloops) {
+static int eval_aptxbtenc_encodestereo(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	aptX_init(&enc_422, 1);
@@ -466,7 +478,9 @@ static int eval_aptxbtenc_encodestereo(size_t nloops) {
 		ret |= diffmem("\tcode", code_new, code_422, sizeof(code_new));
 		if (ret) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
-			return -1;
+			if (errstop)
+				return -1;
+			memcpy(&enc_new, &enc_422, sizeof(enc_new));
 		}
 
 	}
@@ -477,43 +491,44 @@ static int eval_aptxbtenc_encodestereo(size_t nloops) {
 
 int main(int argc, char *argv[]) {
 
-	size_t count;
-	int ret = 0;
+	bool errstop = true;
+	size_t nloops = 1;
 
-	if (argc == 2) {
-		count = atoi(argv[1]);
-		srand(time(NULL));
-	}
-	else if (argc == 3) {
-		count = atoi(argv[1]);
+	srand(time(NULL));
+
+	if (argc >= 2)
+		nloops = atoi(argv[1]);
+	if (argc >= 3)
 		srand(atoi(argv[2]));
-	}
-	else {
-		fprintf(stderr, "usage: %s [COUNT [SEED]]\n", argv[0]);
+	if (argc >= 4)
+		errstop = atoi(argv[3]);
+	if (argc >= 5) {
+		fprintf(stderr, "usage: %s [COUNT] [SEED] [STOP]\n", argv[0]);
 		return -1;
 	}
 
 	fprintf(stderr, "== HEURISTIC EVALUATION ==\n");
-	ret |= eval_init(count);
-	ret |= eval_AsmQmfConvO(count);
-	ret |= eval_AsmQmfConvI(count);
-	ret |= eval_Bsearch(APTX_SUBBAND_LH, count);
-	ret |= eval_Bsearch(APTX_SUBBAND_HL, count);
-	ret |= eval_Bsearch(APTX_SUBBAND_HH, count);
-	ret |= eval_quantiseDifference(APTX_SUBBAND_LL, count);
-	ret |= eval_quantiseDifference(APTX_SUBBAND_LH, count);
-	ret |= eval_quantiseDifference(APTX_SUBBAND_HL, count);
-	ret |= eval_quantiseDifference(APTX_SUBBAND_HH, count);
-	ret |= eval_aptxEncode(count);
-	ret |= eval_insertSync(count);
-	ret |= eval_invertQuantisation(APTX_SUBBAND_LL, count);
-	ret |= eval_invertQuantisation(APTX_SUBBAND_HL, count);
-	ret |= eval_performPredictionFiltering(APTX_SUBBAND_LL, count);
-	ret |= eval_performPredictionFiltering(APTX_SUBBAND_HL, count);
-	ret |= eval_processSubband(APTX_SUBBAND_LL, count);
-	ret |= eval_processSubband(APTX_SUBBAND_HL, count);
-	ret |= eval_packCodeword(count);
-	ret |= eval_aptxbtenc_encodestereo(count);
+
+	int ret = eval_init(nloops, errstop);
+	ret |= eval_AsmQmfConvO(nloops, errstop);
+	ret |= eval_AsmQmfConvI(nloops, errstop);
+	ret |= eval_Bsearch(APTX_SUBBAND_LH, nloops, errstop);
+	ret |= eval_Bsearch(APTX_SUBBAND_HL, nloops, errstop);
+	ret |= eval_Bsearch(APTX_SUBBAND_HH, nloops, errstop);
+	ret |= eval_quantiseDifference(APTX_SUBBAND_LL, nloops, errstop);
+	ret |= eval_quantiseDifference(APTX_SUBBAND_LH, nloops, errstop);
+	ret |= eval_quantiseDifference(APTX_SUBBAND_HL, nloops, errstop);
+	ret |= eval_quantiseDifference(APTX_SUBBAND_HH, nloops, errstop);
+	ret |= eval_aptxEncode(nloops, errstop);
+	ret |= eval_insertSync(nloops, errstop);
+	ret |= eval_invertQuantisation(APTX_SUBBAND_LL, nloops, errstop);
+	ret |= eval_invertQuantisation(APTX_SUBBAND_HL, nloops, errstop);
+	ret |= eval_performPredictionFiltering(APTX_SUBBAND_LL, nloops, errstop);
+	ret |= eval_performPredictionFiltering(APTX_SUBBAND_HL, nloops, errstop);
+	ret |= eval_processSubband(APTX_SUBBAND_LL, nloops, errstop);
+	ret |= eval_processSubband(APTX_SUBBAND_HL, nloops, errstop);
+	ret |= eval_packCodeword(nloops, errstop);
+	ret |= eval_aptxbtenc_encodestereo(nloops, errstop);
 
 	return ret;
 }

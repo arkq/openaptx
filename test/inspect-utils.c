@@ -16,7 +16,7 @@
 int diffint(const char *label, int a, int b) {
 	if (a == b)
 		return 0;
-	fprintf(stderr, "%s: %d != %d\n", label, a, b);
+	fprintf(stderr, "%s: %d != %d (%d)\n", label, a, b, b - a);
 	return a - b;
 }
 
