@@ -17,6 +17,8 @@
 
 #include <string.h>
 
+#include "params.h"
+
 static aptXHD_encoder_100 aptXHD_encoder;
 
 int aptxhdbtenc_init(
@@ -27,6 +29,35 @@ int aptxhdbtenc_init(
 	size_t i, ii;
 
 	memset(e, 0, sizeof(*e));
+	/* XXX: It seems that the logic responsible for byte swapping was copied
+	 *      from the non-HD library version. So, when swapping is enabled the
+	 *      result is a bloody mess... */
+	e->swap = swap ? 8 : 0;
+	e->sync = 7;
+
+	for (i = 0; i < APTXHD_CHANNELS; i++)
+		for (ii = 0; ii < __APTXHD_SUBBAND_MAX; ii++) {
+
+			e->encoder[i].processor[ii].filter.width = aptXHD_params_100[ii].filter_width;
+			e->encoder[i].processor[ii].filter.sign1 = 1;
+			e->encoder[i].processor[ii].filter.sign2 = 1;
+			e->encoder[i].processor[ii].filter.subband_param_unk3_2 = aptXHD_params_100[ii].filter_width;
+			e->encoder[i].processor[ii].filter.subband_param_unk3_3 = aptXHD_params_100[ii].filter_width;
+			e->encoder[i].processor[ii].inverter.subband_param_p1 = aptXHD_params_100[ii].p1;
+			e->encoder[i].processor[ii].inverter.subband_param_bit16_sl1 = aptXHD_params_100[ii].bit16_sl1;
+			e->encoder[i].processor[ii].inverter.subband_param_dith16_sf1 = aptXHD_params_100[ii].dith16_sf1;
+			e->encoder[i].processor[ii].inverter.subband_param_incr16 = aptXHD_params_100[ii].incr16;
+			e->encoder[i].processor[ii].inverter.subband_param_unk1 = aptXHD_params_100[ii].unk1;
+			e->encoder[i].processor[ii].inverter.subband_param_unk2 = aptXHD_params_100[ii].unk2;
+			e->encoder[i].processor[ii].inverter.log = aptXHD_IQuant_log_table;
+
+			e->encoder[i].quantizer[ii].subband_param_bits = aptXHD_params_100[ii].bits;
+			e->encoder[i].quantizer[ii].subband_param_p1 = aptXHD_params_100[ii].p1;
+			e->encoder[i].quantizer[ii].subband_param_bit16_sl1 = aptXHD_params_100[ii].bit16_sl1;
+			e->encoder[i].quantizer[ii].subband_param_p3 = aptXHD_params_100[ii].p3;
+			e->encoder[i].quantizer[ii].subband_param_mLamb16 = aptXHD_params_100[ii].mLamb16;
+
+		}
 
 	return 0;
 }

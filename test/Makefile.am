@@ -30,6 +30,8 @@ hevalhd100_LDADD = \
 	$(top_srcdir)/3rdparty/libaptXHD-1.0.0-rel-Android21-ARMv7A.so
 hevalhd100_SOURCES = \
 	../src/aptxhd100/params.c \
+	../src/aptxhd100/qmf.c \
+	../src/aptxhd100/search.c \
 	inspect-hd100.c \
 	inspect-utils.c \
 	heval-hd100.c
