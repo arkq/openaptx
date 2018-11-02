@@ -34,8 +34,11 @@ libaptx422_la_SOURCES = \
 	aptx422/main.c
 
 libaptxHD100_la_SOURCES = \
+	aptxhd100/encode.c \
 	aptxhd100/params.c \
+	aptxhd100/processor.c \
 	aptxhd100/qmf.c \
+	aptxhd100/quantizer.c \
 	aptxhd100/search.c \
 	aptxhd100/main.c
 

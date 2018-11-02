@@ -18,8 +18,12 @@
 #include "inspect-utils.h"
 #include "openaptx.h"
 
+#include "../src/aptxhd100/encode.h"
+#include "../src/aptxhd100/mathex.h"
 #include "../src/aptxhd100/params.h"
+#include "../src/aptxhd100/processor.h"
 #include "../src/aptxhd100/qmf.h"
+#include "../src/aptxhd100/quantizer.h"
 #include "../src/aptxhd100/search.h"
 
 #define aptxhdbtenc_init aptXHD_init
@@ -176,6 +180,9 @@ static int eval_Bsearch(enum aptXHD_subband sb, size_t nloops, bool errstop) {
 		int32_t x = rand();
 		size_t o_100, o_new;
 
+		a = abs32(a);
+		clamp_int24_t(a);
+
 		switch (sb) {
 		case APTXHD_SUBBAND_LH:
 			o_100 = BsearchLH(a, x, aptXHD_dq6bit16_sl1);
@@ -190,6 +197,146 @@ static int eval_Bsearch(enum aptXHD_subband sb, size_t nloops, bool errstop) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);
 			if (errstop)
 				return -1;
+		}
+
+	}
+
+	fprintf(stderr, "OK\n");
+	return 0;
+}
+
+static int eval_quantiseDifference(enum aptXHD_subband sb, size_t nloops, bool errstop) {
+	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
+
+	aptXHD_encoder_100 enc;
+	aptXHD_init(&enc, 0);
+
+	aptXHD_quantizer_100 *q_100 = &enc.encoder[0].quantizer[sb];
+	aptXHD_quantizer_100 *q_new = &enc.encoder[1].quantizer[sb];
+
+	while (nloops--) {
+
+		int32_t diff = rand();
+		int32_t dither = rand();
+		int32_t x = rand();
+
+		switch (sb) {
+		case APTXHD_SUBBAND_LL:
+			quantiseDifferenceLL(diff, dither, x, q_100);
+			aptXHD_quantize_difference_LL(diff, dither, x, q_new);
+			break;
+		case APTXHD_SUBBAND_LH:
+			quantiseDifferenceLH(diff, dither, x, q_100);
+			aptXHD_quantize_difference_LH(diff, dither, x, q_new);
+			break;
+		case APTXHD_SUBBAND_HL:
+			quantiseDifferenceHL(diff, dither, x, q_100);
+			aptXHD_quantize_difference_HL(diff, dither, x, q_new);
+			break;
+		case APTXHD_SUBBAND_HH:
+			quantiseDifferenceHH(diff, dither, x, q_100);
+			aptXHD_quantize_difference_HH(diff, dither, x, q_new);
+			break;
+		default:
+			fprintf(stderr, "%s sub-band function not available\n", getSubbandName(sb));
+			return -1;
+		}
+
+		if (aptXHD_quantizer_100_cmp("\tquantizer", q_new, q_100)) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
+			if (errstop)
+				return -1;
+			memcpy(q_new, q_100, sizeof(*q_new));
+		}
+
+	}
+
+	fprintf(stderr, "OK\n");
+	return 0;
+}
+
+static int eval_processSubband(enum aptXHD_subband sb, size_t nloops, bool errstop) {
+	fprintf(stderr, "%s%s: ", __func__, getSubbandName(sb));
+
+	aptXHD_encoder_100 enc;
+	aptXHD_init(&enc, 0);
+
+	aptXHD_prediction_filter_100 *f_100 = &enc.encoder[0].processor[sb].filter;
+	aptXHD_prediction_filter_100 *f_new = &enc.encoder[1].processor[sb].filter;
+	aptXHD_inverter_100 *i_100 = &enc.encoder[0].processor[sb].inverter;
+	aptXHD_inverter_100 *i_new = &enc.encoder[1].processor[sb].inverter;
+
+	while (nloops--) {
+
+		/* modulo must match selected subband */
+		int32_t a = rand() % 65;
+		int32_t dither = rand();
+
+		switch (sb) {
+		case APTXHD_SUBBAND_LL:
+			processSubbandLL(a, dither, f_100, i_100);
+			aptXHD_process_subband(a, dither, f_new, i_new);
+			break;
+		case APTXHD_SUBBAND_LH:
+			processSubband(a, dither, f_100, i_100);
+			aptXHD_process_subband(a, dither, f_new, i_new);
+			break;
+		case APTXHD_SUBBAND_HL:
+			processSubbandHL(a, dither, f_100, i_100);
+			aptXHD_process_subband(a, dither, f_new, i_new);
+			break;
+		case APTXHD_SUBBAND_HH:
+			processSubband(a, dither, f_100, i_100);
+			aptXHD_process_subband(a, dither, f_new, i_new);
+			break;
+		default:
+			fprintf(stderr, "%s sub-band function not available\n", getSubbandName(sb));
+			return -1;
+		}
+
+		int ret = 0;
+		ret |= aptXHD_prediction_filter_100_cmp("\tfilter", f_new, f_100);
+		ret |= aptXHD_inverter_100_cmp("\tinverter", i_new, i_100);
+		if (ret) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
+			if (errstop)
+				return -1;
+			memcpy(f_new, f_100, sizeof(*f_new));
+			memcpy(i_new, i_100, sizeof(*i_new));
+		}
+
+	}
+
+	fprintf(stderr, "OK\n");
+	return 0;
+}
+
+static aptXHD_encoder_100 enc_100;
+static aptXHD_encoder_100 enc_new;
+static int eval_aptxbtenc_encodestereo(size_t nloops, bool errstop) {
+	fprintf(stderr, "%s: ", __func__);
+
+	aptXHD_init(&enc_100, 1);
+	aptXHD_init(&enc_new, 1);
+
+	while (nloops--) {
+
+		int32_t pcmL[4] = { rand(), rand(), rand(), rand() };
+		int32_t pcmR[4] = { rand(), rand(), rand(), rand() };
+		uint32_t code_100[2] = { 0 };
+		uint32_t code_new[2] = { 0 };
+
+		aptxhdbtenc_encodestereo(&enc_100, pcmL, pcmR, code_100);
+		aptXHD_encode_stereo(&enc_new, pcmL, pcmR, code_new);
+
+		int ret = 0;
+		ret |= aptXHD_encoder_100_cmp("\tenc", &enc_new, &enc_100);
+		ret |= diffmem("\tcode", code_new, code_100, sizeof(code_new));
+		if (ret) {
+			fprintf(stderr, "Failed: TTL %zd\n", nloops);
+			if (errstop)
+				return -1;
+			memcpy(&enc_new, &enc_100, sizeof(enc_new));
 		}
 
 	}
@@ -222,6 +369,12 @@ int main(int argc, char *argv[]) {
 	ret |= eval_AsmQmfConvO(nloops, errstop);
 	ret |= eval_AsmQmfConvI(nloops, errstop);
 	ret |= eval_Bsearch(APTXHD_SUBBAND_LH, nloops, errstop);
+	ret |= eval_quantiseDifference(APTXHD_SUBBAND_LL, nloops, errstop);
+	ret |= eval_quantiseDifference(APTXHD_SUBBAND_LH, nloops, errstop);
+	ret |= eval_quantiseDifference(APTXHD_SUBBAND_HL, nloops, errstop);
+	ret |= eval_quantiseDifference(APTXHD_SUBBAND_HH, nloops, errstop);
+	ret |= eval_processSubband(APTXHD_SUBBAND_LL, nloops, errstop);
+	ret |= eval_aptxbtenc_encodestereo(nloops, errstop);
 
 	return ret;
 }

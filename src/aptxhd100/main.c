@@ -17,6 +17,7 @@
 
 #include <string.h>
 
+#include "encode.h"
 #include "params.h"
 
 static aptXHD_encoder_100 aptXHD_encoder;
@@ -69,6 +70,19 @@ int aptxhdbtenc_encodestereo(
 		uint32_t code[2]) {
 
 	aptXHD_encoder_100 *enc_ = (aptXHD_encoder_100 *)enc;
+	uint32_t tmp;
+
+	aptXHD_encode(pcmL, &enc_->analyzer[0], &enc_->encoder[0]);
+	aptXHD_encode(pcmR, &enc_->analyzer[1], &enc_->encoder[1]);
+	aptXHD_insert_sync(&enc_->encoder[0], &enc_->encoder[1], &enc_->sync);
+
+	aptXHD_post_encode(&enc_->encoder[0]);
+	aptXHD_post_encode(&enc_->encoder[1]);
+
+	tmp = aptXHD_pack_codeword(&enc_->encoder[0]);
+	code[0] = (tmp >> enc_->swap) | (tmp << enc_->swap);
+	tmp = aptXHD_pack_codeword(&enc_->encoder[1]);
+	code[1] = (tmp >> enc_->swap) | (tmp << enc_->swap);
 
 	return 0;
 }

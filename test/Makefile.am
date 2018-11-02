@@ -27,10 +27,13 @@ heval422_SOURCES = \
 	heval-422.c
 
 hevalhd100_LDADD = \
-	$(top_srcdir)/3rdparty/libaptXHD-1.0.0-rel-Android21-ARMv7A.so
+	$(top_srcdir)/3rdparty/libaptXHD_encoder.so
 hevalhd100_SOURCES = \
+	../src/aptxhd100/encode.c \
 	../src/aptxhd100/params.c \
+	../src/aptxhd100/processor.c \
 	../src/aptxhd100/qmf.c \
+	../src/aptxhd100/quantizer.c \
 	../src/aptxhd100/search.c \
 	inspect-hd100.c \
 	inspect-utils.c \
