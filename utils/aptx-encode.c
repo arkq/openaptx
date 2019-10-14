@@ -126,12 +126,12 @@ usage:
 	frames = (size_t)(frames / 4) * 4;
 	for (i = 0; i < frames * channels; i += 4 * 2) {
 
-		int32_t pcmL[4] = { pcm[i + 0], pcm[i + 2], pcm[i + 4], pcm[i + 6] };
-		int32_t pcmR[4] = { pcm[i + 1], pcm[i + 3], pcm[i + 5], pcm[i + 7] };
-
 #if APTXHD
 
+		int32_t pcmL[4] = { pcm[i + 0] << 8, pcm[i + 2] << 8, pcm[i + 4] << 8, pcm[i + 6] << 8 };
+		int32_t pcmR[4] = { pcm[i + 1] << 8, pcm[i + 3] << 8, pcm[i + 5] << 8, pcm[i + 7] << 8 };
 		uint32_t code[2];
+
 		aptxhdbtenc_encodestereo(enc, pcmL, pcmR, code);
 
 		/* Due to a bug in the library we have to swap byte order by ourself... */
@@ -143,7 +143,10 @@ usage:
 
 #else
 
+		int32_t pcmL[4] = { pcm[i + 0], pcm[i + 2], pcm[i + 4], pcm[i + 6] };
+		int32_t pcmR[4] = { pcm[i + 1], pcm[i + 3], pcm[i + 5], pcm[i + 7] };
 		uint16_t code[2];
+
 		aptxbtenc_encodestereo(enc, pcmL, pcmR, code);
 		fwrite(code, sizeof(*code), 2, f);
 
