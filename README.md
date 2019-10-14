@@ -1,4 +1,4 @@
-[open]aptx - reverse-engineered apt-X 
+[open]aptx - reverse-engineered apt-X
 =====================================
 
 This project is for research purposes only. Without a proper license private and commercial usage
@@ -9,7 +9,6 @@ and used legally (commercial, private and educational usage), go to the Qualcomm
 The source code itself is licensed under the terms of the MIT license. However, compression
 algorithms are patented and licensed under the terms of a proprietary license. Hence, compilation
 and redistribution in a binary format is forbidden!
-
 
 Resources
 ---------

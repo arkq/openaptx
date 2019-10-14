@@ -1,5 +1,5 @@
 /*
- * aptxHD100.h
+ * [open]aptx - aptxHD100.h
  * Copyright (c) 2017-2018 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.

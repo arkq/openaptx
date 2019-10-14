@@ -12,6 +12,13 @@ AM_PROG_AR
 AM_PROG_CC_C_O
 LT_INIT
 
+AC_ARG_ENABLE([doc],
+	[AS_HELP_STRING([--enable-doc], [auto generate manual files])])
+AM_CONDITIONAL([ENABLE_DOC], [test "x$enable_doc" = "xyes"])
+AM_COND_IF([ENABLE_DOC], [
+	AC_CHECK_PROGS([DOXYGEN], [doxygen])
+])
+
 AC_ARG_ENABLE([aptx422],
 	[AS_HELP_STRING([--enable-aptx422], [build reverse-engineered library])])
 AM_CONDITIONAL([ENABLE_APTX422], [test "x$enable_aptx422" = "xyes"])
@@ -35,6 +42,8 @@ AM_COND_IF([WITH_SNDFILE], [
 ])
 
 AC_CONFIG_FILES([
+	doc/Doxyfile
+	doc/Makefile
 	openaptx.pc
 	openaptxhd.pc
 	src/Makefile

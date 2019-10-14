@@ -3,8 +3,15 @@
 
 SUBDIRS = src utils test
 
+if ENABLE_DOC
+SUBDIRS += doc
+endif
+
 include_HEADERS = include/openaptx.h
-noinst_HEADERS = include/aptx422.h
+
+noinst_HEADERS = \
+	include/aptx422.h \
+	include/aptxHD100.h
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = \

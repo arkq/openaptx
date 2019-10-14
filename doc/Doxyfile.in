@@ -9,13 +9,14 @@
 
 PROJECT_NAME           = [open]aptx
 PROJECT_BRIEF          = "Reverse-engineered apt-X library"
+PROJECT_NUMBER         = @PACKAGE_VERSION@
 
 #---------------------------------------------------------------------------
 # Build related configuration options
 #---------------------------------------------------------------------------
 
-INPUT                  = include
-OUTPUT_DIRECTORY       = doc
+INPUT                  = @top_srcdir@/include
+STRIP_FROM_PATH        = @top_srcdir@/include
 
 OPTIMIZE_OUTPUT_FOR_C  = YES
 INLINE_GROUPED_CLASSES = YES
@@ -25,18 +26,15 @@ SORT_MEMBER_DOCS       = NO
 
 HIDE_SCOPE_NAMES       = YES
 HIDE_COMPOUND_REFERENCE= YES
-SHOW_USED_FILES        = NO
-SHOW_FILES             = NO
+SHOW_USED_FILES        = YES
+SHOW_FILES             = YES
 SHOW_NAMESPACES        = NO
 
 #---------------------------------------------------------------------------
 # Configuration options related to the HTML output
 #---------------------------------------------------------------------------
 
-GENERATE_HTML          = YES
-HTML_TIMESTAMP         = YES
-ENUM_VALUES_PER_LINE   = 1
-SEARCHENGINE           = NO
+GENERATE_HTML          = NO
 
 #---------------------------------------------------------------------------
 # Configuration options related to the LaTeX output
