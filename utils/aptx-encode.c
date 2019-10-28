@@ -9,9 +9,10 @@
  */
 
 #if HAVE_CONFIG_H
-# include "config.h"
+# include <config.h>
 #endif
 
+#include <endian.h>
 #include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
