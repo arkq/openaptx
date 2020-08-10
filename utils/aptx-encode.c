@@ -112,6 +112,11 @@ usage:
 	enc = NewAptxEnc(__BYTE_ORDER == __LITTLE_ENDIAN);
 #endif
 
+	if (enc == NULL) {
+		fprintf(stderr, "Couldn't initialize apt-X encoder\n");
+		return EXIT_FAILURE;
+	}
+
 	read_pcm(argv[optind], &pcm, &frames, &channels);
 
 	if (channels != 2) {

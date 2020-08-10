@@ -1,6 +1,6 @@
 /*
  * aptx-info.c
- * Copyright (c) 2017-2018 Arkadiusz Bokowy
+ * Copyright (c) 2017-2020 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -12,26 +12,31 @@
 #include "openaptx.h"
 
 #if APTXHD
-# define aptxlib_new NewAptxhdEnc
-# define aptxlib_size SizeofAptxhdbtenc
-# define aptxlib_build aptxhdbtenc_build
-# define aptxlib_version aptxhdbtenc_version
+# define _aptx_new_ NewAptxhdEnc
+# define _aptx_size_ SizeofAptxhdbtenc
+# define _aptx_build_ aptxhdbtenc_build
+# define _aptx_version_ aptxhdbtenc_version
 #else
-# define aptxlib_new NewAptxEnc
-# define aptxlib_size SizeofAptxbtenc
-# define aptxlib_build aptxbtenc_build
-# define aptxlib_version aptxbtenc_version
+# define _aptx_new_ NewAptxEnc
+# define _aptx_size_ SizeofAptxbtenc
+# define _aptx_build_ aptxbtenc_build
+# define _aptx_version_ aptxbtenc_version
 #endif
 
 int main() {
 
 	printf("Linked apt-X library:\n");
-	printf("  build number:\t\t%s\n", aptxlib_build());
-	printf("  version number:\t%s\n", aptxlib_version());
+	printf("  build number:\t\t%s\n", _aptx_build_());
+	printf("  version number:\t%s\n", _aptx_version_());
 
-	APTXENC enc = aptxlib_new(0);
-	size_t size = aptxlib_size();
+	APTXENC enc = _aptx_new_(0);
+	size_t size = _aptx_size_();
 	size_t i;
+
+	if (enc == NULL) {
+		fprintf(stderr, "Couldn't initialize apt-X encoder\n");
+		return 1;
+	}
 
 	printf("Encoder structure (%zu bytes):\n", size);
 	for (i = 0; i < size; i ++) {

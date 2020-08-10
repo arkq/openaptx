@@ -1,5 +1,5 @@
 # [open]aptx - Makefile.am
-# Copyright (c) 2017-2018 Arkadiusz Bokowy
+# Copyright (c) 2017-2020 Arkadiusz Bokowy
 
 AM_CFLAGS = -I$(top_srcdir)/include
 AM_LDFLAGS = -avoid-version
@@ -16,13 +16,19 @@ if ENABLE_APTXHD100
 lib_LTLIBRARIES += libaptxHD100.la
 endif
 
+libaptx_la_CFLAGS = $(AM_CFLAGS)
+libaptx_la_LIBADD =
+
 libaptx_la_SOURCES = \
 	sample-sonar.c \
-	stub-aptx.c
+	aptx-stub.c
+
+libaptxHD_la_CFLAGS = -DAPTXHD=1 $(AM_CFLAGS)
+libaptxHD_la_LIBADD =
 
 libaptxHD_la_SOURCES = \
 	sample-sonar-hd.c \
-	stub-aptxhd.c
+	aptx-stub.c
 
 libaptx422_la_SOURCES = \
 	aptx422/encode.c \
@@ -49,5 +55,5 @@ sample-sonar.c: $(srcdir)/sample/sonar.aptx
 
 sample-sonar-hd.c: $(srcdir)/sample/sonar.aptxhd
 	echo " \
-		unsigned char sonar_aptxhd[] = { `xxd -i < $<` }; \
-		unsigned int sonar_aptxhd_len = sizeof(sonar_aptxhd);" >$@
+		unsigned char sonar_aptx[] = { `xxd -i < $<` }; \
+		unsigned int sonar_aptx_len = sizeof(sonar_aptx);" >$@
