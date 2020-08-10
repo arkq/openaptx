@@ -1,7 +1,7 @@
 # [open]aptx - configure.ac
-# Copyright (c) 2017-2018 Arkadiusz Bokowy
+# Copyright (c) 2017-2020 Arkadiusz Bokowy
 
-AC_INIT([openaptx], [1.0.0], [arkadiusz.bokowy@gmail.com])
+AC_INIT([openaptx], [1.1.0], [arkadiusz.bokowy@gmail.com])
 AM_INIT_AUTOMAKE([foreign subdir-objects -Wall -Werror])
 
 AC_CONFIG_HEADERS([config.h])
@@ -31,6 +31,14 @@ AC_ARG_ENABLE([aptxHD100],
 AM_CONDITIONAL([ENABLE_APTXHD100], [test "x$enable_aptxHD100" = "xyes"])
 AM_COND_IF([ENABLE_APTXHD100], [
 	AC_DEFINE([ENABLE_APTXHD100], [1], [Define to 1 if aptxHD100 is enabled.])
+])
+
+AC_ARG_WITH([ffmpeg],
+	[AS_HELP_STRING([--with-ffmpeg], [use ffmpeg as an encoding backend])])
+AM_CONDITIONAL([WITH_FFMPEG], [test "x$with_ffmpeg" = "xyes"])
+AM_COND_IF([WITH_FFMPEG], [
+	PKG_CHECK_MODULES([LIBAVCODEC], [libavcodec >= 58.18.100])
+	AC_DEFINE([WITH_FFMPEG], [1], [Define to 1 if ffmpeg is enabled.])
 ])
 
 AC_ARG_WITH([sndfile],

@@ -19,16 +19,28 @@ endif
 libaptx_la_CFLAGS = $(AM_CFLAGS)
 libaptx_la_LIBADD =
 
+if WITH_FFMPEG
+libaptx_la_SOURCES = aptx-ffmpeg.c
+libaptx_la_CFLAGS += @LIBAVCODEC_CFLAGS@
+libaptx_la_LIBADD += @LIBAVCODEC_LIBS@
+else
 libaptx_la_SOURCES = \
 	sample-sonar.c \
 	aptx-stub.c
+endif
 
 libaptxHD_la_CFLAGS = -DAPTXHD=1 $(AM_CFLAGS)
 libaptxHD_la_LIBADD =
 
+if WITH_FFMPEG
+libaptxHD_la_SOURCES = aptx-ffmpeg.c
+libaptxHD_la_CFLAGS += @LIBAVCODEC_CFLAGS@
+libaptxHD_la_LIBADD += @LIBAVCODEC_LIBS@
+else
 libaptxHD_la_SOURCES = \
 	sample-sonar-hd.c \
 	aptx-stub.c
+endif
 
 libaptx422_la_SOURCES = \
 	aptx422/encode.c \
