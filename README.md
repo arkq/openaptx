@@ -1,5 +1,4 @@
-[open]aptx - reverse-engineered apt-X
-=====================================
+# [open]aptx - reverse-engineered apt-X
 
 This project is for research purposes only. Without a proper license private and commercial usage
 might be a case of a patent infringement. If you are looking for a library, which can be installed
@@ -10,8 +9,36 @@ The source code itself is licensed under the terms of the MIT license. However, 
 algorithms are patented and licensed under the terms of a proprietary license. Hence, compilation
 and redistribution in a binary format is forbidden!
 
-Resources
----------
+## Benchmark
+
+Below is the result of a small benchmark test performed with various apt-X encoding libraries.
+Test was done with the usage of `aptx-encode` and `aptx-encode-hd` tools from this repository.
+Elapsed user time was calculated with the usage of a standard UNIX `time` command line tool. All
+libraries (except original Qualcomm libraries) were compiled with Clang version 8.0.7 with the
+`O2` or `O3` optimization level.
+
+### Setup
+
+- CPU: ARM Cortex-A53
+- Input file: WAV audio, Microsoft PCM, 16 bit, stereo 48000 Hz
+- Input duration: 15 minutes 45 seconds
+
+### Results
+
+| Library                                | apt-X     | Mbit/s  | apt-X HD  | Mbit/s  |
+|----------------------------------------|-----------|---------|-----------|---------|
+| [libaptX-1.0.16-rel-Android21][1]      | 1m00.370s | 1.23673 | &mdash;   | &mdash; |
+| [libaptXHD-1.0.1-rel-Android21][1]     | &mdash;   | &mdash; | 1m07.030s | 1.11109 |
+| openaptx-stub                          | 0m04.480s |     0.0 | 0m04.820s |     0.0 |
+| openaptx-ffmpeg (libavcodec-58.54.100) | 1m58.100s | 0.60835 | 2m03.270s | 0.58354 |
+| aptx422                                | 1m19.840s | 0.91721 | &mdash;   | &mdash; |
+| aptxHD100                              | &mdash;   | &mdash; | 1m21.950s | 0.89616 |
+| [libopenaptx-0.2.0][2]                 | 1m22.090s | 0.89062 | 1m25.730s | 0.85429 |
+
+[1]: ./archive "Archive with Qualcomm apt-X encoding libraries"
+[2]: https://github.com/pali/libopenaptx "The apt-X encoder/decoder based on FFmpeg code"
+
+## Resources
 
 1. [AptX audio codec family](https://en.wikipedia.org/wiki/AptX)
 2. [Method and apparatus for electrical signal coding](https://www.google.com/patents/EP0398973B1?cl=en)
