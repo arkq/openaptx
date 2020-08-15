@@ -9,6 +9,23 @@ The source code itself is licensed under the terms of the MIT license. However, 
 algorithms are patented and licensed under the terms of a proprietary license. Hence, compilation
 and redistribution in a binary format is forbidden!
 
+## Compilation
+
+```sh
+autoreconf --install
+mkdir build && cd build
+../configure --enable-doc --with-ffmpeg --with-sndfile
+make && make install
+```
+
+### Configure options
+
+- `--enable-doc` - build and install manual files
+- `--enable-aptx422` - build reverse engineered apt-X library based on `bt-aptX-x86-4.2.2.so`
+- `--enable-aptxHD100` - build reverse engineered apt-X HD library based on `aptXHD-1.0.0-ARMv7A`
+- `--with-ffmpeg` - use FFmpeg as a back-end (otherwise, stub library will be built)
+- `--with-sndfile` - read file formats supported by libsndfile (used by openaptx utils)
+
 ## Benchmark
 
 Below is the result of a small benchmark test performed with various apt-X encoding libraries.

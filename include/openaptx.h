@@ -48,6 +48,9 @@ int aptxbtenc_init(
 /**
  * Initialize encoder structure (HD variant).
  *
+ * @warning
+ * Due to library bug, always set swap parameter to false.
+ *
  * @param enc Apt-X encoder handler.
  * @param swap Swap byte order of the output codeword. DO NOT use it! It seems
  *   that there is a bug in the library which messes up the output if swapping
@@ -61,9 +64,9 @@ int aptxhdbtenc_init(
  * Encode stereo PCM data.
  *
  * @param enc Initialized encoder handler.
- * @param pcmL Four 24-bite audio samples for left channel.
- * @param pcmR Four 24-bite audio samples for right channel.
- * @param code Two 16-bite codewords with auto-sync inserted.
+ * @param pcmL Four 24-bit audio samples for left channel.
+ * @param pcmR Four 24-bit audio samples for right channel.
+ * @param code Two 16-bit codewords with auto-sync inserted.
  * @return On success 0 is returned. */
 int aptxbtenc_encodestereo(
 		APTXENC enc,
@@ -74,10 +77,18 @@ int aptxbtenc_encodestereo(
 /**
  * Encode stereo PCM data (HD variant).
  *
+ * The 24-bit codeword will be placed in the low bytes of the 32-bit output
+ * parameter. The order of bytes assumes big-endian byte ordering. In order
+ * to safely extract data, one can use shift operation, e.g.:
+ *
+ * uint8_t stream[] = {
+ *   code[0] >> 16, code[0] >> 8, code[0],
+ *   code[1] >> 16, code[1] >> 8, code[1] };
+ *
  * @param enc Initialized encoder handler.
- * @param pcmL Four 24-bite audio samples for left channel.
- * @param pcmR Four 24-bite audio samples for right channel.
- * @param code Two 24-bite codewords with auto-sync inserted.
+ * @param pcmL Four 24-bit audio samples for left channel.
+ * @param pcmR Four 24-bit audio samples for right channel.
+ * @param code Two 24-bit codewords with auto-sync inserted.
  * @return On success 0 is returned. */
 int aptxhdbtenc_encodestereo(
 		APTXENC enc,

@@ -140,10 +140,9 @@ usage:
 
 		aptxhdbtenc_encodestereo(enc, pcmL, pcmR, code);
 
-		/* Due to a bug in the library we have to swap byte order by ourself... */
-		uint8_t data[6] = {
-			((uint8_t *)code)[2], ((uint8_t *)code)[1], ((uint8_t *)code)[0],
-			((uint8_t *)code)[6], ((uint8_t *)code)[5], ((uint8_t *)code)[4] };
+		uint8_t data[] = {
+			code[0] >> 16, code[0] >> 8, code[0],
+			code[1] >> 16, code[1] >> 8, code[1] };
 
 		fwrite(data, sizeof(*data), 6, f);
 

@@ -88,11 +88,11 @@ int aptxhdbtenc_encodestereo(
 }
 
 const char *aptxhdbtenc_build(void) {
-	return PACKAGE_STRING;
+	return PACKAGE_NAME "-libbt-aptXHD-1.0.0";
 }
 
 const char *aptxhdbtenc_version(void) {
-	return VERSION;
+	return "1.0.0";
 }
 
 size_t SizeofAptxhdbtenc(void) {

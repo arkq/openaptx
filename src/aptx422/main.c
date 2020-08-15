@@ -86,11 +86,11 @@ int aptxbtenc_encodestereo(
 }
 
 const char *aptxbtenc_build(void) {
-	return PACKAGE_STRING;
+	return PACKAGE_NAME "-libbt-aptX-4.2.2";
 }
 
 const char *aptxbtenc_version(void) {
-	return VERSION;
+	return "4.2.2";
 }
 
 size_t SizeofAptxbtenc(void) {
@@ -100,16 +100,4 @@ size_t SizeofAptxbtenc(void) {
 APTXENC NewAptxEnc(bool swap) {
 	aptxbtenc_init(&aptX_encoder, swap);
 	return &aptX_encoder;
-}
-
-APTXENC aptxbtenc_init2(bool swap) {
-	aptX_encoder_422 *e;
-	if ((e = (aptX_encoder_422 *)malloc(sizeof(*e))) == NULL)
-		return NULL;
-	aptxbtenc_init(e, swap);
-	return e;
-}
-
-void aptxbtenc_free(APTXENC enc) {
-	free(enc);
 }
