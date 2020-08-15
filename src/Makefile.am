@@ -3,6 +3,7 @@
 
 AM_CFLAGS = -I$(top_srcdir)/include
 AM_LDFLAGS = -avoid-version
+CLEANFILES =
 
 lib_LTLIBRARIES = \
 	libaptx.la \
@@ -60,12 +61,14 @@ libaptxHD100_la_SOURCES = \
 	aptxhd100/search.c \
 	aptxhd100/main.c
 
+CLEANFILES += sample-sonar.c
 sample-sonar.c: $(srcdir)/sample/sonar.aptx
 	echo " \
-		unsigned char sonar_aptx[] = { `xxd -i < $<` }; \
-		unsigned int sonar_aptx_len = sizeof(sonar_aptx);" >$@
+		unsigned char sample_sonar_aptx[] = { `xxd -i < $<` }; \
+		unsigned int sample_sonar_aptx_len = sizeof(sample_sonar_aptx);" >$@
 
+CLEANFILES += sample-sonar-hd.c
 sample-sonar-hd.c: $(srcdir)/sample/sonar.aptxhd
 	echo " \
-		unsigned char sonar_aptx[] = { `xxd -i < $<` }; \
-		unsigned int sonar_aptx_len = sizeof(sonar_aptx);" >$@
+		unsigned char sample_sonar_aptx_hd[] = { `xxd -i < $<` }; \
+		unsigned int sample_sonar_aptx_hd_len = sizeof(sample_sonar_aptx_hd);" >$@

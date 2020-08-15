@@ -18,27 +18,31 @@
 
 #include "openaptx.h"
 
+/* Auto-generated buffers with apt-X encoded test sound. */
+extern unsigned char sample_sonar_aptx[], sample_sonar_aptx_hd[];
+extern unsigned int sample_sonar_aptx_len, sample_sonar_aptx_hd_len;
+
 #if APTXHD
+# define APTX_CODEWORD_SIZE 6
 # define _aptx_new_ NewAptxhdEnc
 # define _aptx_size_ SizeofAptxhdbtenc
 # define _aptx_init_ aptxhdbtenc_init
 # define _aptx_encode_ aptxhdbtenc_encodestereo
 # define _aptx_build_ aptxhdbtenc_build
 # define _aptx_version_ aptxhdbtenc_version
-# define APTX_CODEWORD_SIZE 6
+# define _sample_aptx_sonar_ sample_sonar_aptx_hd
+# define _sample_aptx_sonar_len_ sample_sonar_aptx_hd_len
 #else
+# define APTX_CODEWORD_SIZE 4
 # define _aptx_new_ NewAptxEnc
 # define _aptx_size_ SizeofAptxbtenc
 # define _aptx_init_ aptxbtenc_init
 # define _aptx_encode_ aptxbtenc_encodestereo
 # define _aptx_build_ aptxbtenc_build
 # define _aptx_version_ aptxbtenc_version
-# define APTX_CODEWORD_SIZE 4
+# define _sample_aptx_sonar_ sample_sonar_aptx
+# define _sample_aptx_sonar_len_ sample_sonar_aptx_len
 #endif
-
-/* Auto-generated buffer with apt-X encoded test sound. */
-extern unsigned char sonar_aptx[];
-extern unsigned int sonar_aptx_len;
 
 struct encoder_ctx {
 	unsigned int counter;
@@ -80,19 +84,19 @@ int _aptx_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uin
 		uint8_t *p = (uint8_t *)&code[i];
 
 #if APTXHD
-		p[0] = sonar_aptx[ctx->counter + i * 3 + 2];
-		p[1] = sonar_aptx[ctx->counter + i * 3 + 1];
-		p[2] = sonar_aptx[ctx->counter + i * 3 + 0];
+		p[0] = _sample_aptx_sonar_[ctx->counter + i * 3 + 2];
+		p[1] = _sample_aptx_sonar_[ctx->counter + i * 3 + 1];
+		p[2] = _sample_aptx_sonar_[ctx->counter + i * 3 + 0];
 		p[3] = 0;
 #else
-		p[ctx->swap ? 1 : 0] = sonar_aptx[ctx->counter + i * 2 + 1];
-		p[ctx->swap ? 0 : 1] = sonar_aptx[ctx->counter + i * 2 + 0];
+		p[ctx->swap ? 1 : 0] = _sample_aptx_sonar_[ctx->counter + i * 2 + 1];
+		p[ctx->swap ? 0 : 1] = _sample_aptx_sonar_[ctx->counter + i * 2 + 0];
 #endif
 
 	}
 
 	ctx->counter += APTX_CODEWORD_SIZE;
-	if (ctx->counter >= sonar_aptx_len)
+	if (ctx->counter >= _sample_aptx_sonar_len_)
 		ctx->counter = 0;
 
 	return 0;
