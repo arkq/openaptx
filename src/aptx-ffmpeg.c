@@ -21,12 +21,14 @@
 
 #include <libavcodec/avcodec.h>
 
+#define OPENAPTX_IMPLEMENTATION
 #include "openaptx.h"
 
 #if APTXHD
 # define _aptx_new_ NewAptxhdEnc
 # define _aptx_size_ SizeofAptxhdbtenc
 # define _aptx_init_ aptxhdbtenc_init
+# define _aptx_destroy_ aptxhdbtenc_destroy
 # define _aptx_encode_ aptxhdbtenc_encodestereo
 # define _aptx_build_ aptxhdbtenc_build
 # define _aptx_version_ aptxhdbtenc_version
@@ -35,6 +37,7 @@
 # define _aptx_new_ NewAptxEnc
 # define _aptx_size_ SizeofAptxbtenc
 # define _aptx_init_ aptxbtenc_init
+# define _aptx_destroy_ aptxbtenc_destroy
 # define _aptx_encode_ aptxbtenc_encodestereo
 # define _aptx_build_ aptxbtenc_build
 # define _aptx_version_ aptxbtenc_version
@@ -57,33 +60,11 @@ static void __attribute__ ((constructor)) _init() {
 }
 #endif
 
-/**
- * Qualcomm API initialization function was designed to be idempotent. It's
- * not possible to release allocated resources, because API does not provide
- * such function. In order not to leak resources, we will make FFmpeg-based
- * implementation a "singleton"... */
-static struct encoder_ctx *current_ctx = NULL;
-
-static void encoder_ctx_free(struct encoder_ctx *ctx) {
-	av_frame_free(&ctx->av_frame);
-	av_packet_free(&ctx->av_packet);
-	avcodec_free_context(&ctx->av_ctx);
-}
-
 int _aptx_init_(APTXENC enc, bool swap) {
 
-	static bool banner = true;
 	struct encoder_ctx *ctx = enc;
 	const AVCodec *codec;
 	int rv;
-
-	/* warn user about limitations */
-	if (banner) {
-		banner = false;
-		fprintf(stderr, "\n"
-				"WARNING! Initializing apt-X encoder library with FFmpeg engine. This\n"
-				"         library allows to run only ONE encoder instance per process!\n\n");
-	}
 
 	ctx->av_ctx = NULL;
 	ctx->av_packet = NULL;
@@ -92,19 +73,23 @@ int _aptx_init_(APTXENC enc, bool swap) {
 
 	if ((codec = avcodec_find_encoder(APTX_AV_CODEC_ID)) == NULL) {
 		error("Encoder not found: %#x", APTX_AV_CODEC_ID);
+		rv = -ESRCH;
 		goto fail;
 	}
 
 	if ((ctx->av_ctx = avcodec_alloc_context3(codec)) == NULL) {
 		error("Context allocation failed: %s", strerror(errno));
+		rv = -ENOMEM;
 		goto fail;
 	}
 	if ((ctx->av_packet = av_packet_alloc()) == NULL) {
 		error("Packet allocation failed: %s", strerror(errno));
+		rv = -ENOMEM;
 		goto fail;
 	}
 	if ((ctx->av_frame = av_frame_alloc()) == NULL) {
 		error("Frame allocation failed: %s", strerror(errno));
+		rv = -ENOMEM;
 		goto fail;
 	}
 
@@ -121,6 +106,7 @@ int _aptx_init_(APTXENC enc, bool swap) {
 	/* make sure that we can implement Qualcomm API */
 	if (ctx->av_ctx->frame_size < 4) {
 		error("AV frame size too small: %d < 4", ctx->av_ctx->frame_size);
+		rv = -EMSGSIZE;
 		goto fail;
 	}
 
@@ -133,16 +119,25 @@ int _aptx_init_(APTXENC enc, bool swap) {
 		goto fail;
 	}
 
-	if (current_ctx != NULL)
-		encoder_ctx_free(current_ctx);
-	/* save current context */
-	current_ctx = ctx;
-
 	return 0;
 
 fail:
-	encoder_ctx_free(ctx);
+	_aptx_destroy_(ctx);
+	errno = -rv;
 	return -1;
+}
+
+void _aptx_destroy_(APTXENC enc) {
+
+	struct encoder_ctx *ctx = enc;
+
+	if (ctx == NULL)
+		return;
+
+	av_frame_free(&ctx->av_frame);
+	av_packet_free(&ctx->av_packet);
+	avcodec_free_context(&ctx->av_ctx);
+
 }
 
 static int encoder_ctx_encode(struct encoder_ctx *ctx,
@@ -177,6 +172,7 @@ static int encoder_ctx_encode(struct encoder_ctx *ctx,
 
 	if (ctx->av_packet->size != size) {
 		error("Invalid packet size: %d != %d", ctx->av_packet->size, size);
+		rv = -EMSGSIZE;
 		goto fail;
 	}
 
@@ -185,6 +181,7 @@ static int encoder_ctx_encode(struct encoder_ctx *ctx,
 
 fail:
 	av_packet_unref(ctx->av_packet);
+	errno = -rv;
 	return -1;
 }
 
@@ -198,13 +195,17 @@ int _aptx_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uin
 	if (encoder_ctx_encode(ctx, pcmL, pcmR) != 0)
 		return -1;
 
+	uint8_t *data = ctx->av_packet->data;
+
 #if APTXHD
 	/* keep endianess swapping bug from apt-X HD */
-	code[0] = ctx->av_packet->data[0] << 16 | ctx->av_packet->data[1] << 8 | ctx->av_packet->data[2];
-	code[1] = ctx->av_packet->data[3] << 16 | ctx->av_packet->data[4] << 8 | ctx->av_packet->data[5];
+	code[0] = data[0] << 16 | data[1] << 8 | data[2];
+	code[1] = data[3] << 16 | data[4] << 8 | data[5];
 #else
-	code[0] = htobe16(ctx->av_packet->data[0] << 8 | ctx->av_packet->data[1]);
-	code[1] = htobe16(ctx->av_packet->data[2] << 8 | ctx->av_packet->data[3]);
+	unsigned int shift_hi = ctx->swap ? 0 : 8;
+	unsigned int shift_lo = ctx->swap ? 8 : 0;
+	code[0] = data[0] << shift_hi | data[1] << shift_lo;
+	code[1] = data[2] << shift_hi | data[3] << shift_lo;
 #endif
 
 	av_packet_unref(ctx->av_packet);

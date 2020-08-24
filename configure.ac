@@ -59,3 +59,11 @@ AC_CONFIG_FILES([
 	utils/Makefile
 	Makefile])
 AC_OUTPUT
+
+AM_COND_IF([WITH_FFMPEG], [
+	AC_MSG_WARN([             *** aptX with FFmpeg ***])
+	AC_MSG_WARN([Compiling openaptx with FFmpeg as an encoding backend])
+	AC_MSG_WARN([requires aptX Adaptive API support in the client code.])
+	AC_MSG_WARN([Otherwise, client will not be able to free resources])
+	AC_MSG_WARN([allocated with the aptxbtenc_init() function.])
+])
