@@ -14,12 +14,18 @@
  *
  */
 
-#ifndef OPENAPTX_H
-#define OPENAPTX_H
+#ifndef OPENAPTX_H_
+#define OPENAPTX_H_
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#ifdef OPENAPTX_IMPLEMENTATION
+# define OPENAPTX_API_WEAK
+#else
+# define OPENAPTX_API_WEAK __attribute__ ((weak))
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,6 +65,26 @@ int aptxbtenc_init(
 int aptxhdbtenc_init(
 		APTXENC enc,
 		bool swap);
+
+/**
+ * Destroy encoder structure.
+ *
+ * @since
+ * This function is available since apt-X Adaptive library.
+ *
+ * @param enc Initialized encoder handler or NULL. */
+void aptxbtenc_destroy(
+		APTXENC enc) OPENAPTX_API_WEAK;
+
+/**
+ * Destroy encoder structure (HD variant).
+ *
+ * @since
+ * This function is available since apt-X Adaptive library.
+ *
+ * @param enc Initialized encoder handler or NULL. */
+void aptxhdbtenc_destroy(
+		APTXENC enc) OPENAPTX_API_WEAK;
 
 /**
  * Encode stereo PCM data.
@@ -133,7 +159,7 @@ size_t SizeofAptxhdbtenc(void);
  * @param swap Swap byte order of the output codeword.
  * @return This function returns an address to the statically allocated
  *   encoder structure. Do not pass this handler to the free() function. */
-APTXENC NewAptxEnc(bool swap);
+APTXENC NewAptxEnc(bool swap) __attribute__ ((deprecated));
 
 /**
  * Get initialized encoder structure (HD variant).
@@ -149,27 +175,7 @@ APTXENC NewAptxEnc(bool swap);
  *   is enabled.
  * @return This function returns an address to the statically allocated
  *   encoder structure. Do not pass this handler to the free() function. */
-APTXENC NewAptxhdEnc(bool swap);
-
-/**
- * Allocate and initialize encoder structure.
- *
- * @note
- * This function is not available in the apt-X™ encoder library.
- *
- * @param swap Swap byte order of the output codeword.
- * @return On success encoder handler is returned, otherwise NULL. Returned
- *   handler shall be freed with the aptxbtenc_free(). */
-APTXENC aptxbtenc_init2(bool swap);
-
-/**
- * Free resources allocated by the aptxbtenc_init2().
- *
- * @note
- * This function is not available in the apt-X™ encoder library.
- *
- * @param enc Apt-X encoder handler. */
-void aptxbtenc_free(APTXENC enc);
+APTXENC NewAptxhdEnc(bool swap) __attribute__ ((deprecated));
 
 #ifdef __cplusplus
 }

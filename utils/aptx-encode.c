@@ -1,6 +1,6 @@
 /*
  * [open]aptx - aptx-encode.c
- * Copyright (c) 2017-2018 Arkadiusz Bokowy
+ * Copyright (c) 2017-2020 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -25,6 +25,21 @@
 
 #include "openaptx.h"
 
+#if APTXHD
+# define _aptx_size_ SizeofAptxhdbtenc
+# define _aptx_init_ aptxhdbtenc_init
+# define _aptx_destroy_ aptxhdbtenc_destroy
+# define _aptx_encode_ aptxhdbtenc_encodestereo
+# define _aptx_build_ aptxhdbtenc_build
+# define _aptx_version_ aptxhdbtenc_version
+#else
+# define _aptx_size_ SizeofAptxbtenc
+# define _aptx_init_ aptxbtenc_init
+# define _aptx_destroy_ aptxbtenc_destroy
+# define _aptx_encode_ aptxbtenc_encodestereo
+# define _aptx_build_ aptxbtenc_build
+# define _aptx_version_ aptxbtenc_version
+#endif
 
 static void read_pcm(const char *path, int16_t **pcm, size_t *frames, int *channels) {
 
@@ -68,11 +83,19 @@ static void read_pcm(const char *path, int16_t **pcm, size_t *frames, int *chann
 	}
 
 #if WITH_SNDFILE
+
 	sf_readf_short(sf, *pcm, info.frames);
 	sf_close(sf);
+
 #else
-	fread(*pcm, 1, len, f);
+
+	if (fread(*pcm, sizeof(*pcm), *frames, f) != *frames) {
+		fprintf(stderr, "Read PCM: %s\n", strerror(errno));
+		exit(1);
+	}
+
 	fclose(f);
+
 #endif
 
 }
@@ -105,14 +128,20 @@ usage:
 	size_t frames = 0;
 	int channels = 0;
 	size_t i;
+	int rv;
+
+	if ((enc = malloc(_aptx_size_())) == NULL) {
+		fprintf(stderr, "Couldn't allocate apt-X encoder\n");
+		return EXIT_FAILURE;
+	}
 
 #if APTXHD
-	enc = NewAptxhdEnc(false);
+	rv = _aptx_init_(enc, false);
 #else
-	enc = NewAptxEnc(__BYTE_ORDER == __LITTLE_ENDIAN);
+	rv = _aptx_init_(enc, __BYTE_ORDER == __LITTLE_ENDIAN);
 #endif
 
-	if (enc == NULL) {
+	if (rv != 0) {
 		fprintf(stderr, "Couldn't initialize apt-X encoder\n");
 		return EXIT_FAILURE;
 	}
@@ -138,7 +167,7 @@ usage:
 		int32_t pcmR[4] = { pcm[i + 1] << 8, pcm[i + 3] << 8, pcm[i + 5] << 8, pcm[i + 7] << 8 };
 		uint32_t code[2];
 
-		aptxhdbtenc_encodestereo(enc, pcmL, pcmR, code);
+		_aptx_encode_(enc, pcmL, pcmR, code);
 
 		uint8_t data[] = {
 			code[0] >> 16, code[0] >> 8, code[0],
@@ -152,12 +181,18 @@ usage:
 		int32_t pcmR[4] = { pcm[i + 1], pcm[i + 3], pcm[i + 5], pcm[i + 7] };
 		uint16_t code[2];
 
-		aptxbtenc_encodestereo(enc, pcmL, pcmR, code);
+		_aptx_encode_(enc, pcmL, pcmR, code);
 		fwrite(code, sizeof(*code), 2, f);
 
 #endif
 
 	}
+
+	if (_aptx_destroy_ != NULL)
+		_aptx_destroy_(enc);
+	fclose(f);
+	free(pcm);
+	free(enc);
 
 	return 0;
 }

@@ -120,22 +120,3 @@ APTXENC _aptx_new_(bool swap) {
 		return NULL;
 	return &ctx;
 }
-
-#if !APTXHD
-
-APTXENC aptxbtenc_init2(bool swap) {
-	struct encoder_ctx *ctx;
-	if ((ctx = malloc(sizeof(*ctx))) == NULL)
-		return NULL;
-	if (aptxbtenc_init(ctx, swap) != 0) {
-		aptxbtenc_free(ctx);
-		return NULL;
-	}
-	return ctx;
-}
-
-void aptxbtenc_free(APTXENC enc) {
-	free(enc);
-}
-
-#endif

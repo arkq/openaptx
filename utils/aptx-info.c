@@ -9,16 +9,17 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "openaptx.h"
 
 #if APTXHD
-# define _aptx_new_ NewAptxhdEnc
 # define _aptx_size_ SizeofAptxhdbtenc
+# define _aptx_init_ aptxhdbtenc_init
 # define _aptx_build_ aptxhdbtenc_build
 # define _aptx_version_ aptxhdbtenc_version
 #else
-# define _aptx_new_ NewAptxEnc
 # define _aptx_size_ SizeofAptxbtenc
+# define _aptx_init_ aptxbtenc_init
 # define _aptx_build_ aptxbtenc_build
 # define _aptx_version_ aptxbtenc_version
 #endif
@@ -29,11 +30,11 @@ int main() {
 	printf("  build number:\t\t%s\n", _aptx_build_());
 	printf("  version number:\t%s\n", _aptx_version_());
 
-	APTXENC enc = _aptx_new_(0);
 	size_t size = _aptx_size_();
+	APTXENC enc = malloc(size);
 	size_t i;
 
-	if (enc == NULL) {
+	if (_aptx_init_(enc, false) != 0) {
 		fprintf(stderr, "Couldn't initialize apt-X encoder\n");
 		return 1;
 	}
