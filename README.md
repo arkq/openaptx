@@ -29,7 +29,7 @@ make && make install
 ## Benchmark
 
 Below is the result of a small benchmark test performed with various apt-X encoding libraries.
-Test was done with the usage of `aptx-encode` and `aptx-encode-hd` tools from this repository.
+Test was done with the usage of `aptxenc` and `aptxhdenc` tools from this repository.
 Elapsed user time was calculated with the usage of a standard UNIX `time` command line tool. All
 libraries (except original Qualcomm libraries) were compiled with Clang version 8.0.7 with the
 `O2` or `O3` optimization level.

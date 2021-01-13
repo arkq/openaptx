@@ -1,31 +1,27 @@
 # [open]aptx - Makefile.am
-# Copyright (c) 2017-2018 Arkadiusz Bokowy
+# Copyright (c) 2017-2021 Arkadiusz Bokowy
 
 AM_CFLAGS = -I$(top_srcdir)/include
 LDADD = -L$(top_builddir)/src/.libs
 
 bin_PROGRAMS =
 
-bin_PROGRAMS += aptx-decode
-aptx_decode_SOURCES = aptx-decode.c
-aptx_decode_CFLAGS = $(AM_CFLAGS) @SNDFILE_CFLAGS@
-aptx_decode_LDADD = $(LDADD) -laptx @SNDFILE_LIBS@
+bin_PROGRAMS += aptxdec
+aptxdec_SOURCES = aptxdec.c
+aptxdec_CFLAGS = $(AM_CFLAGS) @SNDFILE_CFLAGS@
+aptxdec_LDADD = $(LDADD) -laptx @SNDFILE_LIBS@
 
-bin_PROGRAMS += aptx-encode
-aptx_encode_SOURCES = aptx-encode.c
-aptx_encode_CFLAGS = $(AM_CFLAGS) @SNDFILE_CFLAGS@
-aptx_encode_LDADD = $(LDADD) -laptx @SNDFILE_LIBS@
+bin_PROGRAMS += aptxhddec
+aptxhddec_SOURCES = aptxdec.c
+aptxhddec_CFLAGS = -DAPTXHD=1 $(AM_CFLAGS) @SNDFILE_CFLAGS@
+aptxhddec_LDADD = $(LDADD) -laptxHD @SNDFILE_LIBS@
 
-bin_PROGRAMS += aptx-encode-hd
-aptx_encode_hd_SOURCES = aptx-encode.c
-aptx_encode_hd_CFLAGS = -DAPTXHD=1 $(AM_CFLAGS) @SNDFILE_CFLAGS@
-aptx_encode_hd_LDADD = $(LDADD) -laptxHD @SNDFILE_LIBS@
+bin_PROGRAMS += aptxenc
+aptxenc_SOURCES = aptxenc.c
+aptxenc_CFLAGS = $(AM_CFLAGS) @SNDFILE_CFLAGS@
+aptxenc_LDADD = $(LDADD) -laptx @SNDFILE_LIBS@
 
-bin_PROGRAMS += aptx-info
-aptx_info_SOURCES = aptx-info.c
-aptx_info_LDADD = $(LDADD) -laptx
-
-bin_PROGRAMS += aptx-info-hd
-aptx_info_hd_SOURCES = aptx-info.c
-aptx_info_hd_CFLAGS = -DAPTXHD=1 $(AM_CFLAGS)
-aptx_info_hd_LDADD = $(LDADD) -laptxHD
+bin_PROGRAMS += aptxhdenc
+aptxhdenc_SOURCES = aptxenc.c
+aptxhdenc_CFLAGS = -DAPTXHD=1 $(AM_CFLAGS) @SNDFILE_CFLAGS@
+aptxhdenc_LDADD = $(LDADD) -laptxHD @SNDFILE_LIBS@
