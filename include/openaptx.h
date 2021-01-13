@@ -27,6 +27,14 @@
 # define OPENAPTX_API_WEAK __attribute__ ((weak))
 #endif
 
+/**
+ * Defined to 1 if encoder API is available. */
+#define OPENAPTX_ENCODER 1
+
+/**
+ * Defined to 1 if decoder API is available. */
+#define OPENAPTX_DECODER 1
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,16 +44,22 @@ extern "C" {
 typedef void * APTXENC;
 
 /**
+ * Decoder handler. */
+typedef void * APTXDEC;
+
+/**
  * Initialize encoder structure.
  *
- * @note
  * Encoder handler shall be properly allocated before passing it to
  * this function. To do so, one should use malloc(SizeofAptxbtenc()).
  *
+ * The apt-X stream shall contain codewords in the big-endian byte order. On
+ * the little-endian hosts one can set the swap parameter to true in order to
+ * obtain stream-ready codewords. Otherwise, swapping shall be done in the
+ * client code.
+ *
  * @param enc Apt-X encoder handler.
- * @param swap Swap byte order of the output codeword. The output has to be in
- *   the big-endian format, so for little-endian hosts this value shall be set
- *   to true. One may use `__BYTE_ORDER == __LITTLE_ENDIAN` for convenience.
+ * @param swap Swap byte order of the output codeword.
  * @return On success 0 is returned. */
 int aptxbtenc_init(
 		APTXENC enc,
@@ -64,6 +78,34 @@ int aptxbtenc_init(
  * @return On success 0 is returned. */
 int aptxhdbtenc_init(
 		APTXENC enc,
+		bool swap);
+
+/**
+ * Initialize decoder structure.
+ *
+ * Decoder handler shall be properly allocated before passing it to
+ * this function. To do so, one should use malloc(SizeofAptxbtdec()).
+ *
+ * The apt-X stream contains codewords in the big-endian byte order. However,
+ * the library expects codewords to be in the host native byte order. On the
+ * little-endian hosts one can set the swap parameter to true in order to
+ * perform swapping in the library code.
+ *
+ * @param dec Apt-X decoder handler.
+ * @param swap Swap byte order of the input codeword.
+ * @return On success 0 is returned. */
+int aptxbtdec_init(
+		APTXDEC dec,
+		bool swap);
+
+/**
+ * Initialize decoder structure (HD variant).
+ *
+ * @param dec Apt-X decoder handler.
+ * @param swap Swap byte order of the input codeword.
+ * @return On success 0 is returned. */
+int aptxhdbtdec_init(
+		APTXDEC dec,
 		bool swap);
 
 /**
@@ -87,11 +129,25 @@ void aptxhdbtenc_destroy(
 		APTXENC enc) OPENAPTX_API_WEAK;
 
 /**
+ * Destroy decoder structure.
+ *
+ * @param dec Initialized decoder handler or NULL. */
+void aptxbtdec_destroy(
+		APTXDEC dec);
+
+/**
+ * Destroy decoder structure (HD variant).
+ *
+ * @param dec Initialized decoder handler or NULL. */
+void aptxhdbtdec_destroy(
+		APTXDEC dec);
+
+/**
  * Encode stereo PCM data.
  *
  * @param enc Initialized encoder handler.
- * @param pcmL Four 24-bit audio samples for left channel.
- * @param pcmR Four 24-bit audio samples for right channel.
+ * @param pcmL Four 16-bit audio samples for left channel.
+ * @param pcmR Four 16-bit audio samples for right channel.
  * @param code Two 16-bit codewords with auto-sync inserted.
  * @return On success 0 is returned. */
 int aptxbtenc_encodestereo(
@@ -103,9 +159,9 @@ int aptxbtenc_encodestereo(
 /**
  * Encode stereo PCM data (HD variant).
  *
- * The 24-bit codeword will be placed in the low bytes of the 32-bit output
- * parameter. The order of bytes assumes big-endian byte ordering. In order
- * to safely extract data, one can use shift operation, e.g.:
+ * The 24-bit codeword will be placed in the lower bytes of the 32-bit output
+ * parameter. Note, that the apt-X stream assumes big-endian byte ordering. In
+ * order to safely extract data, one can use shift operation, e.g.:
  *
  * uint8_t stream[] = {
  *   code[0] >> 16, code[0] >> 8, code[0],
@@ -123,21 +179,74 @@ int aptxhdbtenc_encodestereo(
 		uint32_t code[2]);
 
 /**
- * Library build name. */
+ * Decode stereo PCM data.
+ *
+ * @param dec Initialized decoder handler.
+ * @param pcmL Four 16-bit audio samples for left channel.
+ * @param pcmR Four 16-bit audio samples for right channel.
+ * @param code Two 16-bit codewords.
+ * @return On success 0 is returned. */
+int aptxbtdec_decodestereo(
+		APTXDEC dec,
+		int32_t pcmL[4],
+		int32_t pcmR[4],
+		const uint16_t code[2]);
+
+/**
+ * Decode stereo PCM data (HD variant).
+ *
+ * The 24-bit codeword shall be placed in the lower bytes of the 32-bit input
+ * parameter. Note, that the apt-X stream contains codewords in the big-endian
+ * byte ordering. Assuming that the swap parameter for aptxhdbtdec_init() was
+ * set to false, in order to safely pass data one can use shift operation like
+ * follows:
+ *
+ * uint32_t code[2] = {
+ *   (stream[0] << 16) || (stream[1] << 8) || stream[2],
+ *   (stream[3] << 16) || (stream[4] << 8) || stream[5] };
+ *
+ * @param dec Initialized decoder handler.
+ * @param pcmL Four 24-bit audio samples for left channel.
+ * @param pcmR Four 24-bit audio samples for right channel.
+ * @param code Two 24-bit codewords.
+ * @return On success 0 is returned. */
+int aptxhdbtdec_decodestereo(
+		APTXDEC dec,
+		int32_t pcmL[4],
+		int32_t pcmR[4],
+		const uint32_t code[2]);
+
+/**
+ * Encoder library build name. */
 const char *aptxbtenc_build(void);
 
 /**
- * Library build name (HD variant). */
+ * Encoder library build name (HD variant). */
 const char *aptxhdbtenc_build(void);
 
 /**
- * Library version number. */
+ * Decoder library build name. */
+const char *aptxbtdec_build(void);
+
+/**
+ * Decoder library build name (HD variant). */
+const char *aptxhdbtdec_build(void);
+
+/**
+ * Encoder library version number. */
 const char *aptxbtenc_version(void);
 
 /**
- * Library version number (HD variant). */
+ * Encoder library version number (HD variant). */
 const char *aptxhdbtenc_version(void);
 
+/**
+ * Decoder library version number. */
+const char *aptxbtdec_version(void);
+
+/**
+ * Decoder library version number (HD variant). */
+const char *aptxhdbtdec_version(void);
 
 /**
  * Get the size of the encoder structure. */
@@ -146,6 +255,14 @@ size_t SizeofAptxbtenc(void);
 /**
  * Get the size of the encoder structure (HD variant). */
 size_t SizeofAptxhdbtenc(void);
+
+/**
+ * Get the size of the decoder structure. */
+size_t SizeofAptxbtdec(void);
+
+/**
+ * Get the size of the decoder structure (HD variant). */
+size_t SizeofAptxhdbtdec(void);
 
 /**
  * Get initialized encoder structure.
