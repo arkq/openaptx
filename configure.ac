@@ -1,7 +1,7 @@
 # [open]aptx - configure.ac
-# Copyright (c) 2017-2020 Arkadiusz Bokowy
+# Copyright (c) 2017-2021 Arkadiusz Bokowy
 
-AC_INIT([openaptx], [1.2.0], [arkadiusz.bokowy@gmail.com])
+AC_INIT([openaptx], [1.3.0], [arkadiusz.bokowy@gmail.com])
 AM_INIT_AUTOMAKE([foreign subdir-objects -Wall -Werror])
 
 AC_CONFIG_HEADERS([config.h])
@@ -34,7 +34,7 @@ AM_COND_IF([ENABLE_APTXHD100], [
 ])
 
 AC_ARG_WITH([ffmpeg],
-	[AS_HELP_STRING([--with-ffmpeg], [use ffmpeg as an encoding backend])])
+	[AS_HELP_STRING([--with-ffmpeg], [use ffmpeg as encoding/decoding backend])])
 AM_CONDITIONAL([WITH_FFMPEG], [test "x$with_ffmpeg" = "xyes"])
 AM_COND_IF([WITH_FFMPEG], [
 	PKG_CHECK_MODULES([LIBAVCODEC], [libavcodec >= 58.18.100])
@@ -42,7 +42,7 @@ AM_COND_IF([WITH_FFMPEG], [
 ])
 
 AC_ARG_WITH([sndfile],
-	[AS_HELP_STRING([--with-sndfile], [use sndfile for reading audio])])
+	[AS_HELP_STRING([--with-sndfile], [use sndfile for reading/writing audio])])
 AM_CONDITIONAL([WITH_SNDFILE], [test "x$with_sndfile" = "xyes"])
 AM_COND_IF([WITH_SNDFILE], [
 	PKG_CHECK_MODULES([SNDFILE], [sndfile])

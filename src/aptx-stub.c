@@ -1,6 +1,6 @@
 /*
  * [open]aptx - stub-aptx.c
- * Copyright (c) 2017-2020 Arkadiusz Bokowy
+ * Copyright (c) 2017-2021 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -23,36 +23,60 @@ extern unsigned char sample_sonar_aptx[], sample_sonar_aptx_hd[];
 extern unsigned int sample_sonar_aptx_len, sample_sonar_aptx_hd_len;
 
 #if APTXHD
-# define APTX_CODEWORD_SIZE 6
-# define _aptx_new_ NewAptxhdEnc
-# define _aptx_size_ SizeofAptxhdbtenc
-# define _aptx_init_ aptxhdbtenc_init
-# define _aptx_encode_ aptxhdbtenc_encodestereo
-# define _aptx_build_ aptxhdbtenc_build
-# define _aptx_version_ aptxhdbtenc_version
+
+# define APTX_STREAM_DATA_SIZE 6
+
+# define _aptxenc_new_ NewAptxhdEnc
+# define _aptxenc_size_ SizeofAptxhdbtenc
+# define _aptxenc_init_ aptxhdbtenc_init
+# define _aptxenc_destroy_ aptxhdbtenc_destroy
+# define _aptxenc_encode_ aptxhdbtenc_encodestereo
+# define _aptxenc_build_ aptxhdbtenc_build
+# define _aptxenc_version_ aptxhdbtenc_version
+
 # define _sample_aptx_sonar_ sample_sonar_aptx_hd
 # define _sample_aptx_sonar_len_ sample_sonar_aptx_hd_len
+
+# define _aptxdec_size_ SizeofAptxhdbtdec
+# define _aptxdec_init_ aptxhdbtdec_init
+# define _aptxdec_destroy_ aptxhdbtdec_destroy
+# define _aptxdec_decode_ aptxhdbtdec_decodestereo
+# define _aptxdec_build_ aptxhdbtdec_build
+# define _aptxdec_version_ aptxhdbtdec_version
+
 #else
-# define APTX_CODEWORD_SIZE 4
-# define _aptx_new_ NewAptxEnc
-# define _aptx_size_ SizeofAptxbtenc
-# define _aptx_init_ aptxbtenc_init
-# define _aptx_encode_ aptxbtenc_encodestereo
-# define _aptx_build_ aptxbtenc_build
-# define _aptx_version_ aptxbtenc_version
+
+# define APTX_STREAM_DATA_SIZE 4
+
+# define _aptxenc_new_ NewAptxEnc
+# define _aptxenc_size_ SizeofAptxbtenc
+# define _aptxenc_init_ aptxbtenc_init
+# define _aptxenc_destroy_ aptxbtenc_destroy
+# define _aptxenc_encode_ aptxbtenc_encodestereo
+# define _aptxenc_build_ aptxbtenc_build
+# define _aptxenc_version_ aptxbtenc_version
+
 # define _sample_aptx_sonar_ sample_sonar_aptx
 # define _sample_aptx_sonar_len_ sample_sonar_aptx_len
+
+# define _aptxdec_size_ SizeofAptxbtdec
+# define _aptxdec_init_ aptxbtdec_init
+# define _aptxdec_destroy_ aptxbtdec_destroy
+# define _aptxdec_decode_ aptxbtdec_decodestereo
+# define _aptxdec_build_ aptxbtdec_build
+# define _aptxdec_version_ aptxbtdec_version
+
 #endif
 
-struct encoder_ctx {
+struct internal_ctx {
 	unsigned int counter;
 	bool swap;
 };
 
-int _aptx_init_(APTXENC enc, bool swap) {
+int _aptxenc_init_(APTXENC enc, bool swap) {
 
 	static bool banner = true;
-	struct encoder_ctx *ctx = enc;
+	struct internal_ctx *ctx = enc;
 
 	if (banner) {
 		banner = false;
@@ -69,13 +93,41 @@ int _aptx_init_(APTXENC enc, bool swap) {
 	return 0;
 }
 
+int _aptxdec_init_(APTXDEC dec, bool swap) {
+
+	static bool banner = true;
+	struct internal_ctx *ctx = dec;
+
+	if (banner) {
+		banner = false;
+		fprintf(stderr, "\n"
+				"WARNING! Initializing apt-X decoder stub library. This library does NOT\n"
+				"         perform any decoding at all. The sole reason for this library\n"
+				"         to exist is to simplify integration with the proprietary apt-X\n"
+				"         decoder library for open-source projects.\n\n");
+	}
+
+	ctx->counter = 0;
+	ctx->swap = swap;
+
+	return 0;
+}
+
+void _aptxenc_destroy_(APTXENC enc) {
+	(void)enc;
+}
+
+void _aptxdec_destroy_(APTXDEC dec) {
+	(void)dec;
+}
+
 #if APTXHD
-int _aptx_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint32_t code[2]) {
+int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint32_t code[2]) {
 #else
-int _aptx_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint16_t code[2]) {
+int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint16_t code[2]) {
 #endif
 
-	struct encoder_ctx *ctx = enc;
+	struct internal_ctx *ctx = enc;
 	(void)pcmL;
 	(void)pcmR;
 
@@ -95,28 +147,58 @@ int _aptx_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uin
 
 	}
 
-	ctx->counter += APTX_CODEWORD_SIZE;
+	ctx->counter += APTX_STREAM_DATA_SIZE;
 	if (ctx->counter >= _sample_aptx_sonar_len_)
 		ctx->counter = 0;
 
 	return 0;
 }
 
-const char *_aptx_build_(void) {
+#if APTXHD
+int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint32_t code[2]) {
+#else
+int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16_t code[2]) {
+#endif
+	(void)code;
+
+	struct internal_ctx *ctx = dec;
+
+	size_t i;
+	for (i = 0; i < 4; i++) {
+		pcmL[i] = ++ctx->counter;
+		pcmR[i] = ++ctx->counter;
+	}
+
+	return 0;
+}
+
+const char *_aptxenc_build_(void) {
 	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
 }
 
-const char *_aptx_version_(void) {
+const char *_aptxdec_build_(void) {
+	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
+}
+
+const char *_aptxenc_version_(void) {
 	return PACKAGE_VERSION;
 }
 
-size_t _aptx_size_(void) {
-	return sizeof(struct encoder_ctx);
+const char *_aptxdec_version_(void) {
+	return PACKAGE_VERSION;
 }
 
-APTXENC _aptx_new_(bool swap) {
-	static struct encoder_ctx ctx;
-	if (_aptx_init_(&ctx, swap) != 0)
+size_t _aptxenc_size_(void) {
+	return sizeof(struct internal_ctx);
+}
+
+size_t _aptxdec_size_(void) {
+	return sizeof(struct internal_ctx);
+}
+
+APTXENC _aptxenc_new_(bool swap) {
+	static struct internal_ctx ctx;
+	if (_aptxenc_init_(&ctx, swap) != 0)
 		return NULL;
 	return &ctx;
 }
