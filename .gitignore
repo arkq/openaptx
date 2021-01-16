@@ -22,21 +22,18 @@
 *.x86_64
 *.hex
 
-# Autotools
-/autom4te.cache/
+# Build
 /build*/
-/m4/
-/aclocal.m4
-/ar-lib
-/compile
-/config.guess
-/config.sub
-/configure
-/depcomp
-/install-sh
-/ltmain.sh
-/missing
-/test-driver
-Makefile.in
-config.h.in
-*~
+
+# CMake
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps

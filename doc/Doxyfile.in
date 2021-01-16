@@ -9,14 +9,14 @@
 
 PROJECT_NAME           = [open]aptx
 PROJECT_BRIEF          = "Reverse-engineered apt-X library"
-PROJECT_NUMBER         = @PACKAGE_VERSION@
+PROJECT_NUMBER         = @PROJECT_VERSION@
 
 #---------------------------------------------------------------------------
 # Build related configuration options
 #---------------------------------------------------------------------------
 
-INPUT                  = @top_srcdir@/include
-STRIP_FROM_PATH        = @top_srcdir@/include
+INPUT                  = @PROJECT_SOURCE_DIR@/include
+STRIP_FROM_PATH        = @PROJECT_SOURCE_DIR@/include
 
 OPTIMIZE_OUTPUT_FOR_C  = YES
 INLINE_GROUPED_CLASSES = YES

@@ -12,19 +12,18 @@ and redistribution in a binary format is forbidden!
 ## Compilation
 
 ```sh
-autoreconf --install
 mkdir build && cd build
-../configure --enable-doc --with-ffmpeg --with-sndfile
+cmake -DENABLE_DOC=ON -DWITH_FFMPEG=ON -DWITH_SNDFILE=ON ..
 make && make install
 ```
 
 ### Configure options
 
-- `--enable-doc` - build and install manual files
-- `--enable-aptx422` - build reverse engineered apt-X library based on `bt-aptX-x86-4.2.2.so`
-- `--enable-aptxHD100` - build reverse engineered apt-X HD library based on `aptXHD-1.0.0-ARMv7A`
-- `--with-ffmpeg` - use FFmpeg as a back-end (otherwise, stub library will be built)
-- `--with-sndfile` - read file formats supported by libsndfile (used by openaptx utils)
+- `ENABLE_DOC` - build and install manual files (requires Doxygen)
+- `ENABLE_APTX422` - build reverse engineered apt-X library based on `bt-aptX-x86-4.2.2.so`
+- `ENABLE_APTXHD100` - build reverse engineered apt-X HD library based on `aptXHD-1.0.0-ARMv7A`
+- `WITH_FFMPEG` - use FFmpeg as a back-end (otherwise, stub library will be built)
+- `WITH_SNDFILE` - read file formats supported by libsndfile (used by openaptx utils)
 
 ## Benchmark
 

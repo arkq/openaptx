@@ -1,0 +1,80 @@
+# [open]aptx - CMakeLists.txt
+# Copyright (c) 2017-2021 Arkadiusz Bokowy
+
+add_library(aptx SHARED)
+set_target_properties(aptx PROPERTIES
+	PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/openaptx.h)
+
+add_library(aptxHD SHARED)
+set_target_properties(aptxHD PROPERTIES
+	PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/openaptx.h)
+target_compile_definitions(aptxHD PRIVATE -DAPTXHD=1)
+
+if(WITH_FFMPEG)
+
+	target_sources(aptx
+		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-ffmpeg.c)
+	target_link_libraries(aptx PkgConfig::FFLibAVCodec)
+
+	target_sources(aptxHD
+		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-ffmpeg.c)
+	target_link_libraries(aptxHD PkgConfig::FFLibAVCodec)
+
+else()
+
+	add_executable(bin2array
+		${CMAKE_CURRENT_SOURCE_DIR}/sample/bin2array.c)
+
+	set(SAMPLE_SONAR_APTX "${CMAKE_CURRENT_SOURCE_DIR}/sample/sonar.aptx")
+	set(SAMPLE_SONAR_APTX_HD "${CMAKE_CURRENT_SOURCE_DIR}/sample/sonar.aptxhd")
+
+	add_custom_command(
+		DEPENDS bin2array ${SAMPLE_SONAR_APTX}
+		COMMAND bin2array sample_sonar_aptx ${SAMPLE_SONAR_APTX} > sample-sonar.c
+		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/sample-sonar.c)
+
+	target_sources(aptx PRIVATE
+		${CMAKE_CURRENT_BINARY_DIR}/sample-sonar.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx-stub.c)
+
+	add_custom_command(
+		DEPENDS bin2array ${SAMPLE_SONAR_APTX_HD}
+		COMMAND bin2array sample_sonar_aptx_hd ${SAMPLE_SONAR_APTX_HD} > sample-sonar-hd.c
+		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/sample-sonar-hd.c)
+
+	target_sources(aptxHD PRIVATE
+		${CMAKE_CURRENT_BINARY_DIR}/sample-sonar-hd.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx-stub.c)
+
+endif()
+
+install(TARGETS aptx aptxHD
+	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+if(ENABLE_APTX422)
+	add_library(aptx422 SHARED
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/encode.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/params.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/processor.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/qmf.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/quantizer.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/search.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/main.c)
+	set_target_properties(aptx422 PROPERTIES
+		PRIVATE_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/aptx422.h)
+	install(TARGETS aptx422)
+endif()
+
+if(ENABLE_APTXHD100)
+	add_library(aptxHD100 SHARED
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/encode.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/params.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/processor.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/qmf.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/quantizer.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/search.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/main.c)
+	set_target_properties(aptxHD100 PROPERTIES
+		PRIVATE_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/aptxHD100.h)
+	install(TARGETS aptxHD100)
+endif()
