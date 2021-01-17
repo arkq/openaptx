@@ -25,6 +25,15 @@ make && make install
 - `WITH_FFMPEG` - use FFmpeg as a back-end (otherwise, stub library will be built)
 - `WITH_SNDFILE` - read file formats supported by libsndfile (used by openaptx utils)
 
+In the apt-X stub library (build without FFmpeg back-end), all symbols are exported as
+[weak](https://en.wikipedia.org/wiki/Weak_symbol). As a consequence, it should be possible to
+overwrite them during runtime with other library which exports strong symbols. However, it might
+be required to define `LD_DYNAMIC_WEAK` environment variable - for more information consult
+`ld.so` manual.
+
+When reverse-engineered libraries were enabled, they will be automatically linked with the apt-X
+stub library (build without FFmpeg back-end). See previous paragraph for the meaning of this.
+
 ## Benchmark
 
 Below is the result of a small benchmark test performed with various apt-X encoding libraries.

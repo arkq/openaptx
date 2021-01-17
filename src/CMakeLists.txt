@@ -10,6 +10,34 @@ set_target_properties(aptxHD PROPERTIES
 	PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/openaptx.h)
 target_compile_definitions(aptxHD PRIVATE -DAPTXHD=1)
 
+if(ENABLE_APTX422)
+	add_library(aptx-4.2.2 SHARED
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/encode.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/params.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/processor.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/qmf.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/quantizer.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/search.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/main.c)
+	set_target_properties(aptx-4.2.2 PROPERTIES
+		PRIVATE_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/aptx422.h)
+	install(TARGETS aptx-4.2.2)
+endif()
+
+if(ENABLE_APTXHD100)
+	add_library(aptxHD-1.0.0 SHARED
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/encode.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/params.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/processor.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/qmf.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/quantizer.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/search.c
+		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/main.c)
+	set_target_properties(aptxHD-1.0.0 PROPERTIES
+		PRIVATE_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/aptxHD100.h)
+	install(TARGETS aptxHD-1.0.0)
+endif()
+
 if(WITH_FFMPEG)
 
 	target_sources(aptx
@@ -37,6 +65,11 @@ else()
 		${CMAKE_CURRENT_BINARY_DIR}/sample-sonar.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx-stub.c)
 
+	if(ENABLE_APTX422)
+		# use reverse-engineered library as an encoding backend
+		target_link_libraries(aptx aptx-4.2.2)
+	endif()
+
 	add_custom_command(
 		DEPENDS bin2array ${SAMPLE_SONAR_APTX_HD}
 		COMMAND bin2array sample_sonar_aptx_hd ${SAMPLE_SONAR_APTX_HD} > sample-sonar-hd.c
@@ -46,35 +79,12 @@ else()
 		${CMAKE_CURRENT_BINARY_DIR}/sample-sonar-hd.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx-stub.c)
 
+	if(ENABLE_APTXHD100)
+		# use reverse-engineered library as an encoding backend
+		target_link_libraries(aptxHD PRIVATE aptxHD-1.0.0)
+	endif()
+
 endif()
 
 install(TARGETS aptx aptxHD
 	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-if(ENABLE_APTX422)
-	add_library(aptx422 SHARED
-		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/encode.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/params.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/processor.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/qmf.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/quantizer.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/search.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/main.c)
-	set_target_properties(aptx422 PROPERTIES
-		PRIVATE_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/aptx422.h)
-	install(TARGETS aptx422)
-endif()
-
-if(ENABLE_APTXHD100)
-	add_library(aptxHD100 SHARED
-		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/encode.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/params.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/processor.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/qmf.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/quantizer.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/search.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/main.c)
-	set_target_properties(aptxHD100 PROPERTIES
-		PRIVATE_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/aptxHD100.h)
-	install(TARGETS aptxHD100)
-endif()

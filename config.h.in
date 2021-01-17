@@ -1,0 +1,10 @@
+/* config.h - Generated from config.h.in by CMake */
+
+/* Define to 1 if FFmpeg is enabled. */
+#cmakedefine WITH_FFMPEG 1
+
+/* Define to 1 if SNDFile is enabled. */
+#cmakedefine WITH_SNDFILE 1
+
+#define PACKAGE_NAME "@PROJECT_NAME@"
+#define PACKAGE_VERSION "@PROJECT_VERSION@"

@@ -5,7 +5,7 @@ if(ENABLE_APTX422)
 
 	add_library(qualcomm_libaptx SHARED IMPORTED)
 	set_target_properties(qualcomm_libaptx PROPERTIES
-		IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/3rdparty/libbt-aptX-ARM-4.2.2.so)
+		IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/archive/armv7/libbt-aptX-ARM-4.2.2.so)
 
 	add_executable(heval422 EXCLUDE_FROM_ALL
 		${PROJECT_SOURCE_DIR}/src/aptx422/encode.c
@@ -25,7 +25,7 @@ if(ENABLE_APTXHD100)
 
 	add_library(qualcomm_libaptxHD SHARED IMPORTED)
 	set_target_properties(qualcomm_libaptxHD PROPERTIES
-		IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/3rdparty/libaptXHD_encoder.so)
+		IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/archive/armv7/libaptXHD-1.0.0-rel-Android21-ARMv7A.so)
 
 	add_executable(hevalhd100 EXCLUDE_FROM_ALL
 		${PROJECT_SOURCE_DIR}/src/aptxhd100/encode.c
@@ -37,6 +37,6 @@ if(ENABLE_APTXHD100)
 		${CMAKE_CURRENT_SOURCE_DIR}/inspect-hd100.c
 		${CMAKE_CURRENT_SOURCE_DIR}/inspect-utils.c
 		${CMAKE_CURRENT_SOURCE_DIR}/heval-hd100.c)
-	target_link_libraries(heval422 qualcomm_libaptxHD)
+	target_link_libraries(hevalhd100 qualcomm_libaptxHD)
 
 endif()

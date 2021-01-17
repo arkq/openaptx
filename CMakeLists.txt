@@ -31,15 +31,19 @@ endif()
 if(WITH_SNDFILE)
 	find_package(PkgConfig REQUIRED)
 	pkg_check_modules(SNDFile REQUIRED IMPORTED_TARGET sndfile)
-	add_definitions(-DWITH_SNDFILE=1)
 endif()
 
-include(GNUInstallDirs)
+configure_file(
+	${CMAKE_CURRENT_SOURCE_DIR}/config.h.in
+	${CMAKE_CURRENT_BINARY_DIR}/config.h
+	@ONLY)
 
-add_definitions(-DPACKAGE_NAME="${PROJECT_NAME}")
-add_definitions(-DPACKAGE_VERSION="${PROJECT_VERSION}")
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+add_definitions(-DHAVE_CONFIG_H=1)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+include(GNUInstallDirs)
 
 if(ENABLE_DOC)
 	add_subdirectory(doc)
