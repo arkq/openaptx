@@ -27,4 +27,5 @@ install(TARGETS
 	aptxhddec
 	aptxenc
 	aptxhdenc
+	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

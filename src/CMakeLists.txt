@@ -19,9 +19,8 @@ if(ENABLE_APTX422)
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/quantizer.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/search.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/main.c)
-	set_target_properties(aptx-4.2.2 PROPERTIES
-		PRIVATE_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/aptx422.h)
-	install(TARGETS aptx-4.2.2)
+	install(TARGETS aptx-4.2.2
+		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
 if(ENABLE_APTXHD100)
@@ -33,9 +32,8 @@ if(ENABLE_APTXHD100)
 		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/quantizer.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/search.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/main.c)
-	set_target_properties(aptxHD-1.0.0 PROPERTIES
-		PRIVATE_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/aptxHD100.h)
-	install(TARGETS aptxHD-1.0.0)
+	install(TARGETS aptxHD-1.0.0
+		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
 if(WITH_FFMPEG)
@@ -87,4 +85,5 @@ else()
 endif()
 
 install(TARGETS aptx aptxHD
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
