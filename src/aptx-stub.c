@@ -73,6 +73,7 @@ struct internal_ctx {
 	bool swap;
 };
 
+#if ENABLE_APTX_ENCODER_API
 __attribute__ ((weak))
 int _aptxenc_init_(APTXENC enc, bool swap) {
 
@@ -93,7 +94,9 @@ int _aptxenc_init_(APTXENC enc, bool swap) {
 
 	return 0;
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 __attribute__ ((weak))
 int _aptxdec_init_(APTXDEC dec, bool swap) {
 
@@ -114,17 +117,23 @@ int _aptxdec_init_(APTXDEC dec, bool swap) {
 
 	return 0;
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 __attribute__ ((weak))
 void _aptxenc_destroy_(APTXENC enc) {
 	(void)enc;
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 __attribute__ ((weak))
 void _aptxdec_destroy_(APTXDEC dec) {
 	(void)dec;
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 #if APTXHD
 __attribute__ ((weak))
 int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint32_t code[2]) {
@@ -159,7 +168,9 @@ int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], 
 
 	return 0;
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 #if APTXHD
 __attribute__ ((weak))
 int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint32_t code[2]) {
@@ -179,37 +190,51 @@ int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16
 
 	return 0;
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 __attribute__ ((weak))
 const char *_aptxenc_build_(void) {
 	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 __attribute__ ((weak))
 const char *_aptxdec_build_(void) {
 	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 __attribute__ ((weak))
 const char *_aptxenc_version_(void) {
 	return PACKAGE_VERSION;
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 __attribute__ ((weak))
 const char *_aptxdec_version_(void) {
 	return PACKAGE_VERSION;
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 __attribute__ ((weak))
 size_t _aptxenc_size_(void) {
 	return sizeof(struct internal_ctx);
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 __attribute__ ((weak))
 size_t _aptxdec_size_(void) {
 	return sizeof(struct internal_ctx);
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 __attribute__ ((weak))
 APTXENC _aptxenc_new_(bool swap) {
 	static struct internal_ctx ctx;
@@ -217,3 +242,4 @@ APTXENC _aptxenc_new_(bool swap) {
 		return NULL;
 	return &ctx;
 }
+#endif

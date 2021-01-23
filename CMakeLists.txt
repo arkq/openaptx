@@ -3,16 +3,26 @@
 
 cmake_minimum_required(VERSION 3.2)
 project(openaptx
-	VERSION 1.3.0
+	VERSION 1.3.2
 	DESCRIPTION "Reverse-engineered apt-X audio codec"
 	HOMEPAGE_URL "https://github.com/Arkq/openaptx"
 	LANGUAGES C)
 
 option(ENABLE_DOC "Auto-generate manual files using Doxygen." OFF)
+option(ENABLE_APTX_DECODER_API "Build with apt-X decoder API." ON)
+option(ENABLE_APTX_ENCODER_API "Build with apt-X encoder API." ON)
 option(ENABLE_APTX422 "Build reverse-engineered library for apt-X encoding." OFF)
 option(ENABLE_APTXHD100 "Build reverse-engineered library for apt-X HD encoding." OFF)
 option(WITH_FFMPEG "Use FFmpeg as a backend for apt-X / apt-X HD libraries." OFF)
 option(WITH_SNDFILE "Use sndfile for reading/writign audio files." OFF)
+
+if(ENABLE_APTX_DECODER_API)
+	set(HAVE_APTX_DECODER "true")
+endif()
+
+if(ENABLE_APTX_ENCODER_API)
+	set(HAVE_APTX_ENCODER "true")
+endif()
 
 if(WITH_FFMPEG)
 

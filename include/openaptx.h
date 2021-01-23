@@ -27,14 +27,6 @@
 # define OPENAPTX_API_WEAK __attribute__ ((weak))
 #endif
 
-/**
- * Defined to 1 if encoder API is available. */
-#define OPENAPTX_ENCODER 1
-
-/**
- * Defined to 1 if decoder API is available. */
-#define OPENAPTX_DECODER 1
-
 #ifdef __cplusplus
 extern "C" {
 #endif

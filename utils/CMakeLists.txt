@@ -1,31 +1,42 @@
 # [open]aptx - CMakeLists.txt
 # Copyright (c) 2017-2021 Arkadiusz Bokowy
 
-add_executable(aptxdec ${CMAKE_CURRENT_SOURCE_DIR}/aptxdec.c)
-target_link_libraries(aptxdec aptx)
+if(ENABLE_APTX_DECODER_API)
 
-add_executable(aptxhddec ${CMAKE_CURRENT_SOURCE_DIR}/aptxdec.c)
-target_compile_definitions(aptxhddec PRIVATE -DAPTXHD=1)
-target_link_libraries(aptxhddec aptxHD)
+	add_executable(aptxdec ${CMAKE_CURRENT_SOURCE_DIR}/aptxdec.c)
+	target_link_libraries(aptxdec aptx)
 
-add_executable(aptxenc ${CMAKE_CURRENT_SOURCE_DIR}/aptxenc.c)
-target_link_libraries(aptxenc aptx)
+	add_executable(aptxhddec ${CMAKE_CURRENT_SOURCE_DIR}/aptxdec.c)
+	target_compile_definitions(aptxhddec PRIVATE -DAPTXHD=1)
+	target_link_libraries(aptxhddec aptxHD)
 
-add_executable(aptxhdenc ${CMAKE_CURRENT_SOURCE_DIR}/aptxenc.c)
-target_compile_definitions(aptxhdenc PRIVATE -DAPTXHD=1)
-target_link_libraries(aptxhdenc aptxHD)
+	if(WITH_SNDFILE)
+		target_link_libraries(aptxdec PkgConfig::SNDFile)
+		target_link_libraries(aptxhddec PkgConfig::SNDFile)
+	endif()
 
-if(WITH_SNDFILE)
-	target_link_libraries(aptxdec PkgConfig::SNDFile)
-	target_link_libraries(aptxhddec PkgConfig::SNDFile)
-	target_link_libraries(aptxenc PkgConfig::SNDFile)
-	target_link_libraries(aptxhdenc PkgConfig::SNDFile)
+	install(TARGETS
+		aptxdec aptxhddec
+		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 endif()
 
-install(TARGETS
-	aptxdec
-	aptxhddec
-	aptxenc
-	aptxhdenc
-	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
+if(ENABLE_APTX_ENCODER_API)
+
+	add_executable(aptxenc ${CMAKE_CURRENT_SOURCE_DIR}/aptxenc.c)
+	target_link_libraries(aptxenc aptx)
+
+	add_executable(aptxhdenc ${CMAKE_CURRENT_SOURCE_DIR}/aptxenc.c)
+	target_compile_definitions(aptxhdenc PRIVATE -DAPTXHD=1)
+	target_link_libraries(aptxhdenc aptxHD)
+
+	if(WITH_SNDFILE)
+		target_link_libraries(aptxenc PkgConfig::SNDFile)
+		target_link_libraries(aptxhdenc PkgConfig::SNDFile)
+	endif()
+
+	install(TARGETS
+		aptxenc aptxhdenc
+		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+endif()

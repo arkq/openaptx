@@ -20,6 +20,8 @@ make && make install
 ### Configure options
 
 - `ENABLE_DOC` - build and install manual files (requires Doxygen)
+- `ENABLE_APTX_DECODER_API` - build with apt-X / apt-X HD decoder API (default: ON)
+- `ENABLE_APTX_ENCODER_API` - build with apt-X / apt-X HD encoder API (default: ON)
 - `ENABLE_APTX422` - build reverse engineered apt-X library based on `bt-aptX-x86-4.2.2.so`
 - `ENABLE_APTXHD100` - build reverse engineered apt-X HD library based on `aptXHD-1.0.0-ARMv7A`
 - `WITH_FFMPEG` - use FFmpeg as a back-end (otherwise, stub library will be built)

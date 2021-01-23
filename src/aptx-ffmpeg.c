@@ -84,6 +84,7 @@ static void __attribute__ ((constructor)) _init() {
 }
 #endif
 
+#if ENABLE_APTX_ENCODER_API
 int _aptxenc_init_(APTXENC enc, bool swap) {
 
 	struct internal_ctx *ctx = enc;
@@ -155,7 +156,9 @@ fail:
 	errno = -rv;
 	return -1;
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 int _aptxdec_init_(APTXDEC dec, bool swap) {
 
 	struct internal_ctx *ctx = dec;
@@ -205,10 +208,11 @@ int _aptxdec_init_(APTXDEC dec, bool swap) {
 	return 0;
 
 fail:
-	_aptxenc_destroy_(ctx);
+	_aptxdec_destroy_(ctx);
 	errno = -rv;
 	return -1;
 }
+#endif
 
 static void internal_ctx_destroy(struct internal_ctx *ctx) {
 	if (ctx != NULL)
@@ -218,13 +222,17 @@ static void internal_ctx_destroy(struct internal_ctx *ctx) {
 	avcodec_free_context(&ctx->av_ctx);
 }
 
+#if ENABLE_APTX_ENCODER_API
 void _aptxenc_destroy_(APTXENC enc) {
 	internal_ctx_destroy(enc);
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 void _aptxdec_destroy_(APTXDEC dec) {
 	internal_ctx_destroy(dec);
 }
+#endif
 
 static int internal_ctx_encode(struct internal_ctx *ctx,
 		const int32_t pcmL[4], const int32_t pcmR[4]) {
@@ -276,6 +284,7 @@ fail:
 	return -1;
 }
 
+#if ENABLE_APTX_ENCODER_API
 #if APTXHD
 int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint32_t code[2]) {
 #else
@@ -302,6 +311,7 @@ int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], 
 	av_packet_unref(ctx->av_packet);
 	return 0;
 }
+#endif
 
 static int internal_ctx_decode(struct internal_ctx *ctx,
 		const uint8_t *data, size_t data_size) {
@@ -351,6 +361,7 @@ fail:
 	return -1;
 }
 
+#if ENABLE_APTX_DECODER_API
 #if APTXHD
 int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint32_t code[2]) {
 #else
@@ -386,34 +397,49 @@ int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16
 
 	return 0;
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 const char *_aptxenc_build_(void) {
 	return PACKAGE_NAME "-ffmpeg-" PACKAGE_VERSION;
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 const char *_aptxdec_build_(void) {
 	return PACKAGE_NAME "-ffmpeg-" PACKAGE_VERSION;
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 const char *_aptxenc_version_(void) {
 	return PACKAGE_VERSION;
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 const char *_aptxdec_version_(void) {
 	return PACKAGE_VERSION;
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 size_t _aptxenc_size_(void) {
 	return sizeof(struct internal_ctx);
 }
+#endif
 
+#if ENABLE_APTX_DECODER_API
 size_t _aptxdec_size_(void) {
 	return sizeof(struct internal_ctx);
 }
+#endif
 
+#if ENABLE_APTX_ENCODER_API
 APTXENC _aptxenc_new_(bool swap) {
 	static struct internal_ctx ctx;
 	if (_aptxenc_init_(&ctx, swap) != 0)
 		return NULL;
 	return &ctx;
 }
+#endif

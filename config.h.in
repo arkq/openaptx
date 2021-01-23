@@ -1,5 +1,11 @@
 /* config.h - Generated from config.h.in by CMake */
 
+/* Define to 1 if apt-X decoder API is enabled. */
+#cmakedefine ENABLE_APTX_DECODER_API 1
+
+/* Define to 1 if apt-X encoder API is enabled. */
+#cmakedefine ENABLE_APTX_ENCODER_API 1
+
 /* Define to 1 if FFmpeg is enabled. */
 #cmakedefine WITH_FFMPEG 1
 
