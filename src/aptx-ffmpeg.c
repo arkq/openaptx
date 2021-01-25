@@ -72,7 +72,11 @@ struct internal_ctx {
 	AVCodecContext *av_ctx;
 	AVPacket *av_packet;
 	AVFrame *av_frame;
-	bool swap;
+	/* codeword swapping */
+	unsigned int shift_hi;
+	unsigned int shift_lo;
+	/* magic codeword */
+	unsigned int magic;
 };
 
 #define error(M, ...) \
@@ -84,39 +88,33 @@ static void __attribute__ ((constructor)) _init() {
 }
 #endif
 
-#if ENABLE_APTX_ENCODER_API
-int _aptxenc_init_(APTXENC enc, bool swap) {
-
-	struct internal_ctx *ctx = enc;
-	const AVCodec *codec;
-	char errmsg[128];
-	int rv;
+static int internal_ctx_init(struct internal_ctx *ctx, bool swap) {
 
 	ctx->av_ctx = NULL;
 	ctx->av_packet = NULL;
 	ctx->av_frame = NULL;
-	ctx->swap = swap;
 
-	if ((codec = avcodec_find_encoder(APTX_AV_CODEC_ID)) == NULL) {
-		error("Encoder not found: %#x", APTX_AV_CODEC_ID);
-		rv = -ESRCH;
-		goto fail;
-	}
+#if APTXHD
+	ctx->shift_hi = swap ? 0 : 16;
+	ctx->shift_lo = swap ? 16 : 0;
+	ctx->magic = swap ? 0xFFBE73 : 0x73BEFF;
+#else
+	ctx->shift_hi = swap ? 0 : 8;
+	ctx->shift_lo = swap ? 8 : 0;
+	ctx->magic = swap ? 0xBF4B : 0x4BBF;
+#endif
+
+	return 0;
+}
+
+static int internal_ctx_codec_init(struct internal_ctx *ctx, const AVCodec *codec) {
+
+	char errmsg[128];
+	int rv;
 
 	if ((ctx->av_ctx = avcodec_alloc_context3(codec)) == NULL) {
 		error("Context allocation failed: %s", strerror(ENOMEM));
-		rv = -ENOMEM;
-		goto fail;
-	}
-	if ((ctx->av_packet = av_packet_alloc()) == NULL) {
-		error("Packet allocation failed: %s", strerror(ENOMEM));
-		rv = -ENOMEM;
-		goto fail;
-	}
-	if ((ctx->av_frame = av_frame_alloc()) == NULL) {
-		error("Frame allocation failed: %s", strerror(ENOMEM));
-		rv = -ENOMEM;
-		goto fail;
+		return -ENOMEM;
 	}
 
 	ctx->av_ctx->sample_rate = 48000;
@@ -127,7 +125,39 @@ int _aptxenc_init_(APTXENC enc, bool swap) {
 	if ((rv = avcodec_open2(ctx->av_ctx, codec, NULL)) != 0) {
 		av_strerror(rv, errmsg, sizeof(errmsg));
 		error("AV codec open failed: %s", errmsg);
-		rv = -ENOENT;
+		return -ENOENT;
+	}
+
+	return 0;
+}
+
+#if ENABLE_APTX_ENCODER_API
+int _aptxenc_init_(APTXENC enc, bool swap) {
+
+	struct internal_ctx *ctx = enc;
+	const AVCodec *codec;
+	char errmsg[128];
+	int rv;
+
+	internal_ctx_init(ctx, swap);
+
+	if ((codec = avcodec_find_encoder(APTX_AV_CODEC_ID)) == NULL) {
+		error("Encoder not found: %#x", APTX_AV_CODEC_ID);
+		rv = -ESRCH;
+		goto fail;
+	}
+
+	if ((rv = internal_ctx_codec_init(ctx, codec)) != 0)
+		goto fail;
+
+	if ((ctx->av_packet = av_packet_alloc()) == NULL) {
+		error("Packet allocation failed: %s", strerror(ENOMEM));
+		rv = -ENOMEM;
+		goto fail;
+	}
+	if ((ctx->av_frame = av_frame_alloc()) == NULL) {
+		error("Frame allocation failed: %s", strerror(ENOMEM));
+		rv = -ENOMEM;
 		goto fail;
 	}
 
@@ -163,13 +193,9 @@ int _aptxdec_init_(APTXDEC dec, bool swap) {
 
 	struct internal_ctx *ctx = dec;
 	const AVCodec *codec;
-	char errmsg[128];
 	int rv;
 
-	ctx->av_ctx = NULL;
-	ctx->av_packet = NULL;
-	ctx->av_frame = NULL;
-	ctx->swap = swap;
+	internal_ctx_init(ctx, swap);
 
 	if ((codec = avcodec_find_decoder(APTX_AV_CODEC_ID)) == NULL) {
 		error("Decoder not found: %#x", APTX_AV_CODEC_ID);
@@ -177,11 +203,9 @@ int _aptxdec_init_(APTXDEC dec, bool swap) {
 		goto fail;
 	}
 
-	if ((ctx->av_ctx = avcodec_alloc_context3(codec)) == NULL) {
-		error("Context allocation failed: %s", strerror(ENOMEM));
-		rv = -ENOMEM;
+	if ((rv = internal_ctx_codec_init(ctx, codec)) != 0)
 		goto fail;
-	}
+
 	if ((ctx->av_packet = av_packet_alloc()) == NULL) {
 		error("Packet allocation failed: %s", strerror(ENOMEM));
 		rv = -ENOMEM;
@@ -190,18 +214,6 @@ int _aptxdec_init_(APTXDEC dec, bool swap) {
 	if ((ctx->av_frame = av_frame_alloc()) == NULL) {
 		error("Frame allocation failed: %s", strerror(ENOMEM));
 		rv = -ENOMEM;
-		goto fail;
-	}
-
-	ctx->av_ctx->sample_rate = 48000;
-	ctx->av_ctx->sample_fmt = AV_SAMPLE_FMT_S32P;
-	ctx->av_ctx->channel_layout = AV_CH_LAYOUT_STEREO;
-	ctx->av_ctx->channels = av_get_channel_layout_nb_channels(ctx->av_ctx->channel_layout);
-
-	if ((rv = avcodec_open2(ctx->av_ctx, codec, NULL)) != 0) {
-		av_strerror(rv, errmsg, sizeof(errmsg));
-		error("AV codec open failed: %s", errmsg);
-		rv = -ENOENT;
 		goto fail;
 	}
 
@@ -298,12 +310,12 @@ int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], 
 	uint8_t *data = ctx->av_packet->data;
 
 #if APTXHD
-	/* keep endianess swapping bug from apt-X HD */
+	/* keep endianness swapping bug from apt-X HD */
 	code[0] = data[0] << 16 | data[1] << 8 | data[2];
 	code[1] = data[3] << 16 | data[4] << 8 | data[5];
 #else
-	unsigned int shift_hi = ctx->swap ? 0 : 8;
-	unsigned int shift_lo = ctx->swap ? 8 : 0;
+	const unsigned int shift_hi = ctx->shift_hi;
+	const unsigned int shift_lo = ctx->shift_lo;
 	code[0] = data[0] << shift_hi | data[1] << shift_lo;
 	code[1] = data[2] << shift_hi | data[3] << shift_lo;
 #endif
@@ -325,40 +337,31 @@ static int internal_ctx_decode(struct internal_ctx *ctx,
 	if ((rv = avcodec_send_packet(ctx->av_ctx, ctx->av_packet)) != 0) {
 		av_strerror(rv, errmsg, sizeof(errmsg));
 		error("Send packet failed: %s", errmsg);
-		rv = -ECOMM;
-		goto fail;
+		return -ECOMM;
 	}
 
 	if ((rv = avcodec_receive_frame(ctx->av_ctx, ctx->av_frame)) != 0) {
 		av_strerror(rv, errmsg, sizeof(errmsg));
 		error("Receive audio frame failed: %s", errmsg);
-		rv = -ECOMM;
-		goto fail;
+		return -ECOMM;
 	}
 
 	if (ctx->av_frame->channel_layout != AV_CH_LAYOUT_STEREO) {
 		error("Invalid channel layout: %ld != %d", ctx->av_frame->channel_layout, AV_CH_LAYOUT_STEREO);
-		rv = -EMSGSIZE;
-		goto fail;
+		return -EMSGSIZE;
 	}
 
 	if (ctx->av_frame->format != AV_SAMPLE_FMT_S32P) {
 		error("Invalid sample format: %d != %d", ctx->av_frame->format, AV_SAMPLE_FMT_S32P);
-		rv = -EMSGSIZE;
-		goto fail;
+		return -EMSGSIZE;
 	}
 
 	if (ctx->av_frame->nb_samples != 4) {
 		error("Invalid number of samples: %d != %d", ctx->av_frame->nb_samples, 4);
-		rv = -EMSGSIZE;
-		goto fail;
+		return -EMSGSIZE;
 	}
 
 	return 0;
-
-fail:
-	errno = -rv;
-	return -1;
 }
 
 #if ENABLE_APTX_DECODER_API
@@ -369,23 +372,32 @@ int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16
 #endif
 
 	struct internal_ctx *ctx = dec;
+	const unsigned int shift_hi = ctx->shift_hi;
+	const unsigned int shift_lo = ctx->shift_lo;
+	int rv;
 
 #if APTXHD
-	const unsigned int shift_hi = ctx->swap ? 0 : 16;
-	const unsigned int shift_lo = ctx->swap ? 16 : 0;
 	const uint8_t data[APTX_STREAM_DATA_SIZE] = {
 		code[0] >> shift_hi, code[0] >> 8, code[0] >> shift_lo,
 		code[1] >> shift_hi, code[1] >> 8, code[1] >> shift_lo	};
 #else
-	const unsigned int shift_hi = ctx->swap ? 0 : 8;
-	const unsigned int shift_lo = ctx->swap ? 8 : 0;
 	const uint8_t data[APTX_STREAM_DATA_SIZE] = {
 		code[0] >> shift_hi, code[0] >> shift_lo,
 		code[1] >> shift_hi, code[1] >> shift_lo };
 #endif
 
-	if (internal_ctx_decode(ctx, data, sizeof(data)) != 0)
-		return -1;
+	/* reinitialize decoder if new stream was detection */
+	if (code[0] == code[1] && code[0] == ctx->magic) {
+		const AVCodec *codec = ctx->av_ctx->codec;
+		avcodec_free_context(&ctx->av_ctx);
+		if ((rv = internal_ctx_codec_init(ctx, codec)) != 0) {
+			error("AV codec reinitialization failed");
+			return errno = -rv, -1;
+		}
+	}
+
+	if ((rv = internal_ctx_decode(ctx, data, sizeof(data))) != 0)
+		return errno = -rv, -1;
 
 	int32_t *samples_l = (int32_t *)ctx->av_frame->data[0];
 	int32_t *samples_r = (int32_t *)ctx->av_frame->data[1];
