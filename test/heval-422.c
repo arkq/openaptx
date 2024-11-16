@@ -8,6 +8,7 @@
  *
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,9 +55,9 @@ static int eval_init(size_t nloops, bool errstop) {
 		aptX_encoder_422 enc_422 = { 0 };
 		aptX_encoder_422 enc_new = { 0 };
 
-		int swap = rand() > (RAND_MAX / 2);
-		aptxbtenc_init(&enc_422, swap);
-		aptX_init(&enc_new, swap);
+		short endian = rand() > (RAND_MAX / 2);
+		aptxbtenc_init(&enc_422, endian);
+		aptX_init(&enc_new, endian);
 
 		if (aptX_encoder_422_cmp("\tenc", &enc_new, &enc_422)) {
 			fprintf(stderr, "Failed: TTL %zd\n", nloops);

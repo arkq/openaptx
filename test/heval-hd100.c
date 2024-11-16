@@ -8,6 +8,7 @@
  *
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,9 +63,9 @@ static int eval_init(size_t nloops, bool errstop) {
 		aptXHD_encoder_100 enc_100 = { 0 };
 		aptXHD_encoder_100 enc_new = { 0 };
 
-		int swap = rand() > (RAND_MAX / 2);
-		aptxhdbtenc_init(&enc_100, swap);
-		aptXHD_init(&enc_new, swap);
+		short endian = rand() > (RAND_MAX / 2);
+		aptxhdbtenc_init(&enc_100, endian);
+		aptXHD_init(&enc_new, endian);
 
 		int c, b, i, ret = 0;
 		for (c = 0; c < APTXHD_CHANNELS; c++)

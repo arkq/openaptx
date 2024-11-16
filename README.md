@@ -68,5 +68,7 @@ libraries (except original Qualcomm libraries) were compiled with Clang version 
 ## Resources
 
 1. [AptX audio codec family](https://en.wikipedia.org/wiki/AptX)
-2. [Method and apparatus for electrical signal coding](https://www.google.com/patents/EP0398973B1?cl=en)
-3. [Two-channel QMF bank](https://www.hindawi.com/journals/isrn/2013/815619/)
+1. [AptX encoder source code](https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/system/embdrv/encoder_for_aptx/)
+1. [AptX HD encoder source code](https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/system/embdrv/decoder_for_aptxhd/)
+1. [Method and apparatus for electrical signal coding](https://www.google.com/patents/EP0398973B1?cl=en)
+1. [Two-channel QMF bank](https://www.hindawi.com/journals/isrn/2013/815619/)

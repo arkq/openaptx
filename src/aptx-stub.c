@@ -70,12 +70,12 @@ extern unsigned int sample_sonar_aptx_len, sample_sonar_aptx_hd_len;
 
 struct internal_ctx {
 	unsigned int counter;
-	bool swap;
+	short endian;
 };
 
 #if ENABLE_APTX_ENCODER_API
 __attribute__ ((weak))
-int _aptxenc_init_(APTXENC enc, bool swap) {
+int _aptxenc_init_(APTXENC enc, short endian) {
 
 	static bool banner = true;
 	struct internal_ctx *ctx = enc;
@@ -90,7 +90,7 @@ int _aptxenc_init_(APTXENC enc, bool swap) {
 	}
 
 	ctx->counter = 0;
-	ctx->swap = swap;
+	ctx->endian = endian;
 
 	return 0;
 }
@@ -98,7 +98,7 @@ int _aptxenc_init_(APTXENC enc, bool swap) {
 
 #if ENABLE_APTX_DECODER_API
 __attribute__ ((weak))
-int _aptxdec_init_(APTXDEC dec, bool swap) {
+int _aptxdec_init_(APTXDEC dec, short endian) {
 
 	static bool banner = true;
 	struct internal_ctx *ctx = dec;
@@ -113,7 +113,7 @@ int _aptxdec_init_(APTXDEC dec, bool swap) {
 	}
 
 	ctx->counter = 0;
-	ctx->swap = swap;
+	ctx->endian = endian;
 
 	return 0;
 }
@@ -156,8 +156,8 @@ int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], 
 		p[2] = _sample_aptx_sonar_[ctx->counter + i * 3 + 0];
 		p[3] = 0;
 #else
-		p[ctx->swap ? 1 : 0] = _sample_aptx_sonar_[ctx->counter + i * 2 + 1];
-		p[ctx->swap ? 0 : 1] = _sample_aptx_sonar_[ctx->counter + i * 2 + 0];
+		p[ctx->endian ? 1 : 0] = _sample_aptx_sonar_[ctx->counter + i * 2 + 1];
+		p[ctx->endian ? 0 : 1] = _sample_aptx_sonar_[ctx->counter + i * 2 + 0];
 #endif
 
 	}
@@ -236,9 +236,9 @@ size_t _aptxdec_size_(void) {
 
 #if ENABLE_APTX_ENCODER_API
 __attribute__ ((weak))
-APTXENC _aptxenc_new_(bool swap) {
+APTXENC _aptxenc_new_(short endian) {
 	static struct internal_ctx ctx;
-	if (_aptxenc_init_(&ctx, swap) != 0)
+	if (_aptxenc_init_(&ctx, endian) != 0)
 		return NULL;
 	return &ctx;
 }

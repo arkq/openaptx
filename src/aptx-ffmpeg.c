@@ -14,7 +14,6 @@
 
 #include <errno.h>
 #include <endian.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,20 +87,20 @@ static void __attribute__ ((constructor)) _init() {
 }
 #endif
 
-static int internal_ctx_init(struct internal_ctx *ctx, bool swap) {
+static int internal_ctx_init(struct internal_ctx *ctx, short endian) {
 
 	ctx->av_ctx = NULL;
 	ctx->av_packet = NULL;
 	ctx->av_frame = NULL;
 
 #if APTXHD
-	ctx->shift_hi = swap ? 0 : 16;
-	ctx->shift_lo = swap ? 16 : 0;
-	ctx->magic = swap ? 0xFFBE73 : 0x73BEFF;
+	ctx->shift_hi = endian ? 0 : 16;
+	ctx->shift_lo = endian ? 16 : 0;
+	ctx->magic = endian ? 0xFFBE73 : 0x73BEFF;
 #else
-	ctx->shift_hi = swap ? 0 : 8;
-	ctx->shift_lo = swap ? 8 : 0;
-	ctx->magic = swap ? 0xBF4B : 0x4BBF;
+	ctx->shift_hi = endian ? 0 : 8;
+	ctx->shift_lo = endian ? 8 : 0;
+	ctx->magic = endian ? 0xBF4B : 0x4BBF;
 #endif
 
 	return 0;
@@ -132,14 +131,14 @@ static int internal_ctx_codec_init(struct internal_ctx *ctx, const AVCodec *code
 }
 
 #if ENABLE_APTX_ENCODER_API
-int _aptxenc_init_(APTXENC enc, bool swap) {
+int _aptxenc_init_(APTXENC enc, short endian) {
 
 	struct internal_ctx *ctx = enc;
 	const AVCodec *codec;
 	char errmsg[128];
 	int rv;
 
-	internal_ctx_init(ctx, swap);
+	internal_ctx_init(ctx, endian);
 
 	if ((codec = avcodec_find_encoder(APTX_AV_CODEC_ID)) == NULL) {
 		error("Encoder not found: %#x", APTX_AV_CODEC_ID);
@@ -189,13 +188,13 @@ fail:
 #endif
 
 #if ENABLE_APTX_DECODER_API
-int _aptxdec_init_(APTXDEC dec, bool swap) {
+int _aptxdec_init_(APTXDEC dec, short endian) {
 
 	struct internal_ctx *ctx = dec;
 	const AVCodec *codec;
 	int rv;
 
-	internal_ctx_init(ctx, swap);
+	internal_ctx_init(ctx, endian);
 
 	if ((codec = avcodec_find_decoder(APTX_AV_CODEC_ID)) == NULL) {
 		error("Decoder not found: %#x", APTX_AV_CODEC_ID);
@@ -448,9 +447,9 @@ size_t _aptxdec_size_(void) {
 #endif
 
 #if ENABLE_APTX_ENCODER_API
-APTXENC _aptxenc_new_(bool swap) {
+APTXENC _aptxenc_new_(short endian) {
 	static struct internal_ctx ctx;
-	if (_aptxenc_init_(&ctx, swap) != 0)
+	if (_aptxenc_init_(&ctx, endian) != 0)
 		return NULL;
 	return &ctx;
 }

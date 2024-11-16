@@ -1,6 +1,6 @@
 /*
  * [open]aptx - aptxenc.c
- * Copyright (c) 2017-2021 Arkadiusz Bokowy
+ * Copyright (c) 2017-2024 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -97,7 +97,7 @@ void encode(const char *filename) {
 		return;
 	}
 
-	if (_aptxenc_init_(enc, false) != 0) {
+	if (_aptxenc_init_(enc, 0) != 0) {
 		fprintf(stderr, "Error: Couldn't initialize apt-X encoder\n");
 		return;
 	}

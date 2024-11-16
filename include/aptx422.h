@@ -105,7 +105,7 @@ typedef struct aptX_QMF_analyzer_422_t {
 } __attribute__ ((packed)) aptX_QMF_analyzer_422;
 
 typedef struct aptX_encoder_422_t {
-	int32_t swap;
+	int32_t shift;
 	int32_t sync;
 	aptX_subband_encoder_422 encoder[APTX_CHANNELS];
 	aptX_QMF_analyzer_422 analyzer[APTX_CHANNELS];

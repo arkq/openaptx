@@ -182,8 +182,8 @@ int aptX_encoder_422_cmp(
 	if (a == b)
 		return ret;
 
-	sprintf(tmp, "%s.swap", label);
-	ret |= diffint(tmp, a->swap, b->swap);
+	sprintf(tmp, "%s.shift", label);
+	ret |= diffint(tmp, a->shift, b->shift);
 	sprintf(tmp, "%s.sync", label);
 	ret |= diffint(tmp, a->sync, b->sync);
 	for (i = 0; i < APTX_CHANNELS; i++) {

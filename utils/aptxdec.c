@@ -1,6 +1,6 @@
 /*
  * [open]aptx - aptxdec.c
- * Copyright (c) 2017-2021 Arkadiusz Bokowy
+ * Copyright (c) 2017-2024 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -56,7 +56,7 @@ void decode(const char *filename) {
 		return;
 	}
 
-	if (_aptxdec_init_(dec, false) != 0) {
+	if (_aptxdec_init_(dec, 0) != 0) {
 		fprintf(stderr, "Error: Couldn't initialize apt-X decoder\n");
 		return;
 	}

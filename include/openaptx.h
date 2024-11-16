@@ -17,7 +17,6 @@
 #ifndef OPENAPTX_H_
 #define OPENAPTX_H_
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -51,11 +50,12 @@ typedef void * APTXDEC;
  * client code.
  *
  * @param enc Apt-X encoder handler.
- * @param swap Swap byte order of the output codeword.
+ * @param endian Endianess of the output data, where 0 is for little-endian
+ *   and big-endian otherwise.
  * @return On success 0 is returned. */
 int aptxbtenc_init(
 		APTXENC enc,
-		bool swap);
+		short endian);
 
 /**
  * Initialize encoder structure (HD variant).
@@ -64,13 +64,13 @@ int aptxbtenc_init(
  * Due to library bug, always set swap parameter to false.
  *
  * @param enc Apt-X encoder handler.
- * @param swap Swap byte order of the output codeword. DO NOT use it! It seems
- *   that there is a bug in the library which messes up the output if swapping
- *   is enabled.
+ * @param endian Endianess of the output data, where 0 is for little-endian
+ *   and big-endian otherwise. DO NOT use it! It seems that there is a bug in
+ *   the library which messes up the output if big-endian is enabled.
  * @return On success 0 is returned. */
 int aptxhdbtenc_init(
 		APTXENC enc,
-		bool swap);
+		short endian);
 
 /**
  * Initialize decoder structure.
@@ -84,21 +84,23 @@ int aptxhdbtenc_init(
  * perform swapping in the library code.
  *
  * @param dec Apt-X decoder handler.
- * @param swap Swap byte order of the input codeword.
+ * @param endian Endianess of the input data, where 0 is for little-endian
+ *   and big-endian otherwise.
  * @return On success 0 is returned. */
 int aptxbtdec_init(
 		APTXDEC dec,
-		bool swap);
+		short endian);
 
 /**
  * Initialize decoder structure (HD variant).
  *
  * @param dec Apt-X decoder handler.
- * @param swap Swap byte order of the input codeword.
+ * @param endian Endianess of the input data, where 0 is for little-endian
+ *   and big-endian otherwise.
  * @return On success 0 is returned. */
 int aptxhdbtdec_init(
 		APTXDEC dec,
-		bool swap);
+		short endian);
 
 /**
  * Destroy encoder structure.
@@ -265,10 +267,11 @@ size_t SizeofAptxhdbtdec(void);
  * @deprecated
  * Please use aptxbtenc_init() instead.
  *
- * @param swap Swap byte order of the output codeword.
+ * @param endian Endianess of the input data, where 0 is for little-endian
+ *   and big-endian otherwise.
  * @return This function returns an address to the statically allocated
  *   encoder structure. Do not pass this handler to the free() function. */
-APTXENC NewAptxEnc(bool swap) __attribute__ ((deprecated));
+APTXENC NewAptxEnc(short endian) __attribute__ ((deprecated));
 
 /**
  * Get initialized encoder structure (HD variant).
@@ -279,12 +282,11 @@ APTXENC NewAptxEnc(bool swap) __attribute__ ((deprecated));
  * @deprecated
  * Please use aptxhdbtenc_init() instead.
  *
- * @param swap Swap byte order of the output codeword. DO NOT use it! It seems
- *   that there is a bug in the library which messes up the output if swapping
- *   is enabled.
+ * @param endian Endianess of the input data, where 0 is for little-endian
+ *   and big-endian otherwise.
  * @return This function returns an address to the statically allocated
  *   encoder structure. Do not pass this handler to the free() function. */
-APTXENC NewAptxhdEnc(bool swap) __attribute__ ((deprecated));
+APTXENC NewAptxhdEnc(short endian) __attribute__ ((deprecated));
 
 #ifdef __cplusplus
 }

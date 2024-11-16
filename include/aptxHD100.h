@@ -105,7 +105,7 @@ typedef struct aptXHD_QMF_analyzer_100_t {
 } __attribute__ ((packed)) aptXHD_QMF_analyzer_100;
 
 typedef struct aptXHD_encoder_t {
-	int32_t swap;
+	int32_t shift;
 	int32_t sync;
 	aptXHD_subband_encoder_100 encoder[APTXHD_CHANNELS];
 	aptXHD_QMF_analyzer_100 analyzer[APTXHD_CHANNELS];

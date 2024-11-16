@@ -24,7 +24,7 @@ static aptXHD_encoder_100 aptXHD_encoder;
 
 int aptxhdbtenc_init(
 		APTXENC enc,
-		bool swap) {
+		short endian) {
 
 	aptXHD_encoder_100 *e = (aptXHD_encoder_100 *)enc;
 	size_t i, ii;
@@ -33,7 +33,7 @@ int aptxhdbtenc_init(
 	/* XXX: It seems that the logic responsible for byte swapping was copied
 	 *      from the non-HD library version. So, when swapping is enabled the
 	 *      result is a bloody mess... */
-	e->swap = swap ? 8 : 0;
+	e->shift = endian ? 8 : 0;
 	e->sync = 7;
 
 	for (i = 0; i < APTXHD_CHANNELS; i++)
@@ -80,9 +80,9 @@ int aptxhdbtenc_encodestereo(
 	aptXHD_post_encode(&enc_->encoder[1]);
 
 	tmp = aptXHD_pack_codeword(&enc_->encoder[0]);
-	code[0] = (tmp >> enc_->swap) | (tmp << enc_->swap);
+	code[0] = (tmp >> enc_->shift) | (tmp << enc_->shift);
 	tmp = aptXHD_pack_codeword(&enc_->encoder[1]);
-	code[1] = (tmp >> enc_->swap) | (tmp << enc_->swap);
+	code[1] = (tmp >> enc_->shift) | (tmp << enc_->shift);
 
 	return 0;
 }
@@ -99,7 +99,7 @@ size_t SizeofAptxhdbtenc(void) {
 	return sizeof(aptXHD_encoder);
 }
 
-APTXENC NewAptxhdEnc(bool swap) {
-	aptxhdbtenc_init(&aptXHD_encoder, swap);
+APTXENC NewAptxhdEnc(short endian) {
+	aptxhdbtenc_init(&aptXHD_encoder, endian);
 	return &aptXHD_encoder;
 }

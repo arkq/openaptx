@@ -25,13 +25,13 @@ static aptX_encoder_422 aptX_encoder;
 
 int aptxbtenc_init(
 		APTXENC enc,
-		bool swap) {
+		short endian) {
 
 	aptX_encoder_422 *e = (aptX_encoder_422 *)enc;
 	size_t i, ii;
 
 	memset(e, 0, sizeof(*e));
-	e->swap = swap ? 8 : 0;
+	e->shift = endian ? 8 : 0;
 	e->sync = 7;
 
 	for (i = 0; i < APTX_CHANNELS; i++)
@@ -78,9 +78,9 @@ int aptxbtenc_encodestereo(
 	aptX_post_encode(&enc_->encoder[1]);
 
 	tmp = aptX_pack_codeword(&enc_->encoder[0]);
-	code[0] = (tmp >> enc_->swap) | (tmp << enc_->swap);
+	code[0] = (tmp >> enc_->shift) | (tmp << enc_->shift);
 	tmp = aptX_pack_codeword(&enc_->encoder[1]);
-	code[1] = (tmp >> enc_->swap) | (tmp << enc_->swap);
+	code[1] = (tmp >> enc_->shift) | (tmp << enc_->shift);
 
 	return 0;
 }
@@ -97,7 +97,7 @@ size_t SizeofAptxbtenc(void) {
 	return sizeof(aptX_encoder);
 }
 
-APTXENC NewAptxEnc(bool swap) {
-	aptxbtenc_init(&aptX_encoder, swap);
+APTXENC NewAptxEnc(short endian) {
+	aptxbtenc_init(&aptX_encoder, endian);
 	return &aptX_encoder;
 }
