@@ -1,7 +1,7 @@
 # [open]aptx - CMakeLists.txt
 # Copyright (c) 2017-2021 Arkadiusz Bokowy
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.22)
 project(openaptx
 	VERSION 1.3.2
 	DESCRIPTION "Reverse-engineered apt-X audio codec"

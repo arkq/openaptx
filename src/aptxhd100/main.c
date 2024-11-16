@@ -9,11 +9,11 @@
  */
 
 #if HAVE_CONFIG_H
-# include "config.h"
+#	include "config.h"
 #endif
 
-#include "openaptx.h"
 #include "aptxHD100.h"
+#include "openaptx.h"
 
 #include <string.h>
 
@@ -22,12 +22,9 @@
 
 static aptXHD_encoder_100 aptXHD_encoder;
 
-int aptxhdbtenc_init(
-		APTXENC enc,
-		short endian) {
+int aptxhdbtenc_init(APTXENC enc, short endian) {
 
-	aptXHD_encoder_100 *e = (aptXHD_encoder_100 *)enc;
-	size_t i, ii;
+	aptXHD_encoder_100 * e = (aptXHD_encoder_100 *)enc;
 
 	memset(e, 0, sizeof(*e));
 	/* XXX: It seems that the logic responsible for byte swapping was copied
@@ -36,8 +33,8 @@ int aptxhdbtenc_init(
 	e->shift = endian ? 8 : 0;
 	e->sync = 7;
 
-	for (i = 0; i < APTXHD_CHANNELS; i++)
-		for (ii = 0; ii < __APTXHD_SUBBAND_MAX; ii++) {
+	for (size_t i = 0; i < APTXHD_CHANNELS; i++)
+		for (size_t ii = 0; ii < APTXHD_SUBBANDS; ii++) {
 
 			e->encoder[i].processor[ii].filter.width = aptXHD_params_100[ii].filter_width;
 			e->encoder[i].processor[ii].filter.sign1 = 1;
@@ -57,19 +54,14 @@ int aptxhdbtenc_init(
 			e->encoder[i].quantizer[ii].subband_param_bit16_sl1 = aptXHD_params_100[ii].bit16_sl1;
 			e->encoder[i].quantizer[ii].subband_param_p3 = aptXHD_params_100[ii].p3;
 			e->encoder[i].quantizer[ii].subband_param_mLamb16 = aptXHD_params_100[ii].mLamb16;
-
 		}
 
 	return 0;
 }
 
-int aptxhdbtenc_encodestereo(
-		APTXENC enc,
-		const int32_t pcmL[4],
-		const int32_t pcmR[4],
-		uint32_t code[2]) {
+int aptxhdbtenc_encodestereo(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint32_t code[2]) {
 
-	aptXHD_encoder_100 *enc_ = (aptXHD_encoder_100 *)enc;
+	aptXHD_encoder_100 * enc_ = (aptXHD_encoder_100 *)enc;
 	uint32_t tmp;
 
 	aptXHD_encode(pcmL, &enc_->analyzer[0], &enc_->encoder[0]);
@@ -87,11 +79,11 @@ int aptxhdbtenc_encodestereo(
 	return 0;
 }
 
-const char *aptxhdbtenc_build(void) {
+const char * aptxhdbtenc_build(void) {
 	return PACKAGE_NAME "-libbt-aptXHD-1.0.0";
 }
 
-const char *aptxhdbtenc_version(void) {
+const char * aptxhdbtenc_version(void) {
 	return "1.0.0";
 }
 

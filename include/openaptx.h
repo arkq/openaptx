@@ -21,9 +21,9 @@
 #include <stdint.h>
 
 #ifdef OPENAPTX_IMPLEMENTATION
-# define OPENAPTX_API_WEAK
+#	define OPENAPTX_API_WEAK
 #else
-# define OPENAPTX_API_WEAK __attribute__ ((weak))
+#	define OPENAPTX_API_WEAK __attribute__((weak))
 #endif
 
 #ifdef __cplusplus
@@ -53,9 +53,7 @@ typedef void * APTXDEC;
  * @param endian Endianess of the output data, where 0 is for little-endian
  *   and big-endian otherwise.
  * @return On success 0 is returned. */
-int aptxbtenc_init(
-		APTXENC enc,
-		short endian);
+int aptxbtenc_init(APTXENC enc, short endian);
 
 /**
  * Initialize encoder structure (HD variant).
@@ -68,9 +66,7 @@ int aptxbtenc_init(
  *   and big-endian otherwise. DO NOT use it! It seems that there is a bug in
  *   the library which messes up the output if big-endian is enabled.
  * @return On success 0 is returned. */
-int aptxhdbtenc_init(
-		APTXENC enc,
-		short endian);
+int aptxhdbtenc_init(APTXENC enc, short endian);
 
 /**
  * Initialize decoder structure.
@@ -87,9 +83,7 @@ int aptxhdbtenc_init(
  * @param endian Endianess of the input data, where 0 is for little-endian
  *   and big-endian otherwise.
  * @return On success 0 is returned. */
-int aptxbtdec_init(
-		APTXDEC dec,
-		short endian);
+int aptxbtdec_init(APTXDEC dec, short endian);
 
 /**
  * Initialize decoder structure (HD variant).
@@ -98,9 +92,7 @@ int aptxbtdec_init(
  * @param endian Endianess of the input data, where 0 is for little-endian
  *   and big-endian otherwise.
  * @return On success 0 is returned. */
-int aptxhdbtdec_init(
-		APTXDEC dec,
-		short endian);
+int aptxhdbtdec_init(APTXDEC dec, short endian);
 
 /**
  * Destroy encoder structure.
@@ -109,8 +101,7 @@ int aptxhdbtdec_init(
  * This function is available since apt-X Adaptive library.
  *
  * @param enc Initialized encoder handler or NULL. */
-void aptxbtenc_destroy(
-		APTXENC enc) OPENAPTX_API_WEAK;
+void aptxbtenc_destroy(APTXENC enc) OPENAPTX_API_WEAK;
 
 /**
  * Destroy encoder structure (HD variant).
@@ -119,22 +110,19 @@ void aptxbtenc_destroy(
  * This function is available since apt-X Adaptive library.
  *
  * @param enc Initialized encoder handler or NULL. */
-void aptxhdbtenc_destroy(
-		APTXENC enc) OPENAPTX_API_WEAK;
+void aptxhdbtenc_destroy(APTXENC enc) OPENAPTX_API_WEAK;
 
 /**
  * Destroy decoder structure.
  *
  * @param dec Initialized decoder handler or NULL. */
-void aptxbtdec_destroy(
-		APTXDEC dec);
+void aptxbtdec_destroy(APTXDEC dec);
 
 /**
  * Destroy decoder structure (HD variant).
  *
  * @param dec Initialized decoder handler or NULL. */
-void aptxhdbtdec_destroy(
-		APTXDEC dec);
+void aptxhdbtdec_destroy(APTXDEC dec);
 
 /**
  * Encode stereo PCM data.
@@ -144,11 +132,7 @@ void aptxhdbtdec_destroy(
  * @param pcmR Four 16-bit audio samples for right channel.
  * @param code Two 16-bit codewords with auto-sync inserted.
  * @return On success 0 is returned. */
-int aptxbtenc_encodestereo(
-		APTXENC enc,
-		const int32_t pcmL[4],
-		const int32_t pcmR[4],
-		uint16_t code[2]);
+int aptxbtenc_encodestereo(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint16_t code[2]);
 
 /**
  * Encode stereo PCM data (HD variant).
@@ -166,11 +150,7 @@ int aptxbtenc_encodestereo(
  * @param pcmR Four 24-bit audio samples for right channel.
  * @param code Two 24-bit codewords with auto-sync inserted.
  * @return On success 0 is returned. */
-int aptxhdbtenc_encodestereo(
-		APTXENC enc,
-		const int32_t pcmL[4],
-		const int32_t pcmR[4],
-		uint32_t code[2]);
+int aptxhdbtenc_encodestereo(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint32_t code[2]);
 
 /**
  * Decode stereo PCM data.
@@ -180,11 +160,7 @@ int aptxhdbtenc_encodestereo(
  * @param pcmR Four 16-bit audio samples for right channel.
  * @param code Two 16-bit codewords.
  * @return On success 0 is returned. */
-int aptxbtdec_decodestereo(
-		APTXDEC dec,
-		int32_t pcmL[4],
-		int32_t pcmR[4],
-		const uint16_t code[2]);
+int aptxbtdec_decodestereo(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16_t code[2]);
 
 /**
  * Decode stereo PCM data (HD variant).
@@ -204,43 +180,39 @@ int aptxbtdec_decodestereo(
  * @param pcmR Four 24-bit audio samples for right channel.
  * @param code Two 24-bit codewords.
  * @return On success 0 is returned. */
-int aptxhdbtdec_decodestereo(
-		APTXDEC dec,
-		int32_t pcmL[4],
-		int32_t pcmR[4],
-		const uint32_t code[2]);
+int aptxhdbtdec_decodestereo(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint32_t code[2]);
 
 /**
  * Encoder library build name. */
-const char *aptxbtenc_build(void);
+const char * aptxbtenc_build(void);
 
 /**
  * Encoder library build name (HD variant). */
-const char *aptxhdbtenc_build(void);
+const char * aptxhdbtenc_build(void);
 
 /**
  * Decoder library build name. */
-const char *aptxbtdec_build(void);
+const char * aptxbtdec_build(void);
 
 /**
  * Decoder library build name (HD variant). */
-const char *aptxhdbtdec_build(void);
+const char * aptxhdbtdec_build(void);
 
 /**
  * Encoder library version number. */
-const char *aptxbtenc_version(void);
+const char * aptxbtenc_version(void);
 
 /**
  * Encoder library version number (HD variant). */
-const char *aptxhdbtenc_version(void);
+const char * aptxhdbtenc_version(void);
 
 /**
  * Decoder library version number. */
-const char *aptxbtdec_version(void);
+const char * aptxbtdec_version(void);
 
 /**
  * Decoder library version number (HD variant). */
-const char *aptxhdbtdec_version(void);
+const char * aptxhdbtdec_version(void);
 
 /**
  * Get the size of the encoder structure. */
@@ -271,7 +243,7 @@ size_t SizeofAptxhdbtdec(void);
  *   and big-endian otherwise.
  * @return This function returns an address to the statically allocated
  *   encoder structure. Do not pass this handler to the free() function. */
-APTXENC NewAptxEnc(short endian) __attribute__ ((deprecated));
+APTXENC NewAptxEnc(short endian) __attribute__((deprecated));
 
 /**
  * Get initialized encoder structure (HD variant).
@@ -286,7 +258,7 @@ APTXENC NewAptxEnc(short endian) __attribute__ ((deprecated));
  *   and big-endian otherwise.
  * @return This function returns an address to the statically allocated
  *   encoder structure. Do not pass this handler to the free() function. */
-APTXENC NewAptxhdEnc(short endian) __attribute__ ((deprecated));
+APTXENC NewAptxhdEnc(short endian) __attribute__((deprecated));
 
 #ifdef __cplusplus
 }

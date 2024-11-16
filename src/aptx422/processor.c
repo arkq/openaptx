@@ -12,10 +12,7 @@
 
 #include "mathex.h"
 
-void aptX_invert_quantization(
-		int32_t a,
-		int32_t dither,
-		aptX_inverter_422 *i) {
+void aptX_invert_quantization(int32_t a, int32_t dither, aptX_inverter_422 * i) {
 
 	size_t i_ = (a < 0 ? ~a : a) + 1;
 	int32_t sl1 = (a < 0 ? -1 : 1) * i->subband_param_bit16_sl1[i_];
@@ -30,10 +27,9 @@ void aptX_invert_quantization(
 
 	int shift = -3 - i->subband_param_unk2 - (i->unk10 >> 8);
 	i->unk9 = i->log[(i->unk10 >> 3) & 0x1F] >> shift;
-
 }
 
-void aptX_prediction_filtering(int32_t a, aptX_prediction_filter_422 *f) {
+void aptX_prediction_filtering(int32_t a, aptX_prediction_filter_422 * f) {
 
 	int32_t tmp1 = a + f->unk8;
 	clamp_int24_t(tmp1);
@@ -48,15 +44,14 @@ void aptX_prediction_filtering(int32_t a, aptX_prediction_filter_422 *f) {
 		v2 = ((a >> 31) & 0xFF000000) + 8388736;
 	}
 
-	int32_t *q = &f->arr2[f->i + f->width];
+	int32_t * q = &f->arr2[f->i + f->width];
 	int64_t sum = 0;
 	int32_t c = a;
-	size_t i;
 
 	f->i = (f->i + 1) % f->width;
 	f->subband_param_unk3_3 = a;
 
-	for (i = 0; i < (size_t)f->width; i++, q--) {
+	for (size_t i = 0; i < (size_t)f->width; i++, q--) {
 
 		int32_t tmp;
 		if (*q >= 0)
@@ -67,7 +62,6 @@ void aptX_prediction_filtering(int32_t a, aptX_prediction_filter_422 *f) {
 		f->arr1[i] += (tmp >> 8) - (((uint32_t)tmp) << 23 == 0x80000000);
 		sum += (int64_t)f->arr1[i] * c;
 		c = *q;
-
 	}
 
 	f->unk6 = tmp1;
@@ -80,11 +74,7 @@ void aptX_prediction_filtering(int32_t a, aptX_prediction_filter_422 *f) {
 	f->arr2[f->i + f->width] = a;
 }
 
-void aptX_process_subband(
-		int32_t a,
-		int32_t dither,
-		aptX_prediction_filter_422 *f,
-		aptX_inverter_422 *i) {
+void aptX_process_subband(int32_t a, int32_t dither, aptX_prediction_filter_422 * f, aptX_inverter_422 * i) {
 
 	aptX_invert_quantization(a, dither, i);
 
@@ -126,5 +116,4 @@ void aptX_process_subband(
 	clip_range(f->unk2, -(0x3C0000 - f->unk3), 0x3C0000 - f->unk3);
 
 	aptX_prediction_filtering(i->unk11, f);
-
 }

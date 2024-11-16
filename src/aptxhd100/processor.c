@@ -13,10 +13,7 @@
 
 #include "mathex.h"
 
-void aptXHD_invert_quantization(
-		int32_t a,
-		int32_t dither,
-		aptXHD_inverter_100 *i) {
+void aptXHD_invert_quantization(int32_t a, int32_t dither, aptXHD_inverter_100 * i) {
 
 	size_t i_ = (a < 0 ? ~a : a) + 1;
 	int32_t sl1 = (a < 0 ? -1 : 1) * i->subband_param_bit16_sl1[i_];
@@ -32,10 +29,9 @@ void aptXHD_invert_quantization(
 
 	int shift = -3 - i->subband_param_unk2 - (i->unk10 >> 8);
 	i->unk9 = i->log[(i->unk10 >> 3) & 0x1F] >> shift;
-
 }
 
-void aptXHD_prediction_filtering(int32_t a, aptXHD_prediction_filter_100 *f) {
+void aptXHD_prediction_filtering(int32_t a, aptXHD_prediction_filter_100 * f) {
 
 	uint64_t x1 = (unsigned)f->unk6 * (uint64_t)(unsigned)f->unk3;
 	x1 += (uint64_t)(f->unk6 * (f->unk3 >> 31) + f->unk3 * (f->unk6 >> 31)) << 32;
@@ -58,9 +54,8 @@ void aptXHD_prediction_filtering(int32_t a, aptXHD_prediction_filter_100 *f) {
 
 	int64_t sum = 0;
 	int64_t c = a;
-	int i;
 
-	for (i = 0; i < f->width; i++) {
+	for (size_t i = 0; i < (size_t)f->width; i++) {
 
 		int32_t tmp;
 		if (f->arr2[f->i + f->width - i] >= 0)
@@ -72,7 +67,6 @@ void aptXHD_prediction_filtering(int32_t a, aptXHD_prediction_filter_100 *f) {
 
 		sum += c * f->arr1[i];
 		c = f->arr2[f->i + f->width - i];
-
 	}
 
 	f->unk7 = sum >> 22;
@@ -86,11 +80,7 @@ void aptXHD_prediction_filtering(int32_t a, aptXHD_prediction_filter_100 *f) {
 	f->subband_param_unk3_3 = a;
 }
 
-void aptXHD_process_subband(
-		int32_t a,
-		int32_t dither,
-		aptXHD_prediction_filter_100 *f,
-		aptXHD_inverter_100 *i) {
+void aptXHD_process_subband(int32_t a, int32_t dither, aptXHD_prediction_filter_100 * f, aptXHD_inverter_100 * i) {
 
 	aptXHD_invert_quantization(a, dither, i);
 
@@ -100,14 +90,12 @@ void aptXHD_process_subband(
 	if (tmp > 0) {
 		f->sign1 = 1;
 		f->sign2 = sign1;
-	}
-	else if (tmp < 0) {
+	} else if (tmp < 0) {
 		f->sign1 = -1;
 		f->sign2 = sign1;
 		sign1 *= -1;
 		sign2 *= -1;
-	}
-	else {
+	} else {
 		f->sign1 = 1;
 		f->sign2 = sign1;
 		sign1 = 0;
@@ -129,5 +117,4 @@ void aptXHD_process_subband(
 	clip_range(f->unk2, -(0x3C0000 - f->unk3), 0x3C0000 - f->unk3);
 
 	aptXHD_prediction_filtering(i->unk11, f);
-
 }

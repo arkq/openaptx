@@ -9,47 +9,47 @@
  */
 
 #if HAVE_CONFIG_H
-# include <config.h>
+#	include <config.h>
 #endif
 
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #if WITH_SNDFILE
-# include <sndfile.h>
+#	include <sndfile.h>
 #endif
 
 #include "openaptx.h"
 
 #if APTXHD
-# define _aptxenc_size_ SizeofAptxhdbtenc
-# define _aptxenc_init_ aptxhdbtenc_init
-# define _aptxenc_destroy_ aptxhdbtenc_destroy
-# define _aptxenc_encode_ aptxhdbtenc_encodestereo
-# define _aptxenc_build_ aptxhdbtenc_build
-# define _aptxenc_version_ aptxhdbtenc_version
+#	define _aptxenc_size_ SizeofAptxhdbtenc
+#	define _aptxenc_init_ aptxhdbtenc_init
+#	define _aptxenc_destroy_ aptxhdbtenc_destroy
+#	define _aptxenc_encode_ aptxhdbtenc_encodestereo
+#	define _aptxenc_build_ aptxhdbtenc_build
+#	define _aptxenc_version_ aptxhdbtenc_version
 #else
-# define _aptxenc_size_ SizeofAptxbtenc
-# define _aptxenc_init_ aptxbtenc_init
-# define _aptxenc_destroy_ aptxbtenc_destroy
-# define _aptxenc_encode_ aptxbtenc_encodestereo
-# define _aptxenc_build_ aptxbtenc_build
-# define _aptxenc_version_ aptxbtenc_version
+#	define _aptxenc_size_ SizeofAptxbtenc
+#	define _aptxenc_init_ aptxbtenc_init
+#	define _aptxenc_destroy_ aptxbtenc_destroy
+#	define _aptxenc_encode_ aptxbtenc_encodestereo
+#	define _aptxenc_build_ aptxbtenc_build
+#	define _aptxenc_version_ aptxbtenc_version
 #endif
 
-void encode(const char *filename) {
+void encode(const char * filename) {
 
 	const int read_samples = 8;
 	int samples;
 
 #if WITH_SNDFILE
 
-	SNDFILE *sf;
+	SNDFILE * sf;
 	SF_INFO info = { .format = 0 };
 
 	if (strcmp(filename, "-") == 0) {
@@ -57,8 +57,7 @@ void encode(const char *filename) {
 			fprintf(stderr, "Error: Couldn't open audio file: %s\n", sf_strerror(sf));
 			return;
 		}
-	}
-	else {
+	} else {
 		if ((sf = sf_open(filename, SFM_READ, &info)) == NULL) {
 			fprintf(stderr, "Error: Couldn't open audio file: %s\n", sf_strerror(sf));
 			return;
@@ -74,12 +73,11 @@ void encode(const char *filename) {
 
 #else
 
-	FILE *f;
+	FILE * f;
 
 	if (strcmp(filename, "-") == 0) {
 		f = stdin;
-	}
-	else {
+	} else {
 		if ((f = fopen(filename, "r")) == NULL) {
 			fprintf(stderr, "Error: Couldn't open audio file: %s\n", strerror(errno));
 			return;
@@ -120,36 +118,32 @@ void encode(const char *filename) {
 #if APTXHD
 
 		/* signed 24-bit integer stored on 4-bytes */
-#if WITH_SNDFILE
+#	if WITH_SNDFILE
 		int32_t pcmL[4] = { pcm[0] >> 8, pcm[2] >> 8, pcm[4] >> 8, pcm[6] >> 8 };
 		int32_t pcmR[4] = { pcm[1] >> 8, pcm[3] >> 8, pcm[5] >> 8, pcm[7] >> 8 };
-#else
+#	else
 		int32_t pcmL[4] = { pcm[0] << 8, pcm[2] << 8, pcm[4] << 8, pcm[6] << 8 };
 		int32_t pcmR[4] = { pcm[1] << 8, pcm[3] << 8, pcm[5] << 8, pcm[7] << 8 };
-#endif
+#	endif
 		uint32_t code[2];
 
 		aptxhdbtenc_encodestereo(enc, pcmL, pcmR, code);
-		uint8_t data[6] = {
-			code[0] >> 16, code[0] >> 8, code[0] >> 0,
-			code[1] >> 16, code[1] >> 8, code[1] >> 0 };
+		uint8_t data[6] = { code[0] >> 16, code[0] >> 8, code[0] >> 0, code[1] >> 16, code[1] >> 8, code[1] >> 0 };
 
 #else
 
 		/* signed 16-bit integer stored on 4-bytes */
-#if WITH_SNDFILE
+#	if WITH_SNDFILE
 		int32_t pcmL[4] = { pcm[0] >> 16, pcm[2] >> 16, pcm[4] >> 16, pcm[6] >> 16 };
 		int32_t pcmR[4] = { pcm[1] >> 16, pcm[3] >> 16, pcm[5] >> 16, pcm[7] >> 16 };
-#else
+#	else
 		int32_t pcmL[4] = { pcm[0], pcm[2], pcm[4], pcm[6] };
 		int32_t pcmR[4] = { pcm[1], pcm[3], pcm[5], pcm[7] };
-#endif
+#	endif
 		uint16_t code[2];
 
 		aptxbtenc_encodestereo(enc, pcmL, pcmR, code);
-		uint8_t data[4] = {
-			code[0] >> 8, code[0] >> 0,
-			code[1] >> 8, code[1] >> 0 };
+		uint8_t data[4] = { code[0] >> 8, code[0] >> 0, code[1] >> 8, code[1] >> 0 };
 
 #endif
 
@@ -157,7 +151,6 @@ void encode(const char *filename) {
 		if (fwrite(data, 1, sizeof(data), stdout) != sizeof(data)) {
 			fprintf(stderr, "Warning: Couldn't write data: %s\n", strerror(errno));
 		}
-
 	}
 
 	if (_aptxenc_destroy_ != NULL)
@@ -168,13 +161,12 @@ void encode(const char *filename) {
 	fclose(f);
 #endif
 	free(enc);
-
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char * argv[]) {
 
 	int opt;
-	const char *opts = "hv";
+	const char * opts = "hv";
 	const struct option longopts[] = {
 		{ "help", no_argument, NULL, 'h' },
 		{ "version", no_argument, NULL, 'v' },
@@ -183,17 +175,17 @@ int main(int argc, char *argv[]) {
 
 	while ((opt = getopt_long(argc, argv, opts, longopts, NULL)) != -1)
 		switch (opt) {
-		case 'h' /* --help */ :
-usage:
+		case 'h' /* --help */:
+		usage:
 			printf("Usage:\n"
-					"  %s [OPTION]... <FILE>...\n"
-					"\nOptions:\n"
-					"  -h, --help\t\tprint this help and exit\n"
-					"  -v, --version\t\tprint library version and exit\n",
-					argv[0]);
+			       "  %s [OPTION]... <FILE>...\n"
+			       "\nOptions:\n"
+			       "  -h, --help\t\tprint this help and exit\n"
+			       "  -v, --version\t\tprint library version and exit\n",
+			       argv[0]);
 			return EXIT_SUCCESS;
 
-		case 'v' /* --version */ :
+		case 'v' /* --version */:
 			fprintf(stderr, "Linked apt-X library:\n");
 			fprintf(stderr, "  build number:\t\t%s\n", _aptxenc_build_());
 			fprintf(stderr, "  version number:\t%s\n", _aptxenc_version_());
@@ -207,8 +199,7 @@ usage:
 	if (optind == argc)
 		goto usage;
 
-	int i;
-	for (i = optind; i < argc; i++)
+	for (int i = optind; i < argc; i++)
 		encode(argv[i]);
 
 	return EXIT_SUCCESS;

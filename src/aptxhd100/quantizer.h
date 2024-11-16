@@ -17,26 +17,10 @@
 extern "C" {
 #endif
 
-void aptXHD_quantize_difference_LL(
-		int32_t diff,
-		int32_t dither,
-		int32_t x,
-		aptXHD_quantizer_100 *q);
-void aptXHD_quantize_difference_LH(
-		int32_t diff,
-		int32_t dither,
-		int32_t x,
-		aptXHD_quantizer_100 *q);
-void aptXHD_quantize_difference_HL(
-		int32_t diff,
-		int32_t dither,
-		int32_t x,
-		aptXHD_quantizer_100 *q);
-void aptXHD_quantize_difference_HH(
-		int32_t diff,
-		int32_t dither,
-		int32_t x,
-		aptXHD_quantizer_100 *q);
+void aptXHD_quantize_difference_LL(int32_t diff, int32_t dither, int32_t x, aptXHD_quantizer_100 * q);
+void aptXHD_quantize_difference_LH(int32_t diff, int32_t dither, int32_t x, aptXHD_quantizer_100 * q);
+void aptXHD_quantize_difference_HL(int32_t diff, int32_t dither, int32_t x, aptXHD_quantizer_100 * q);
+void aptXHD_quantize_difference_HH(int32_t diff, int32_t dither, int32_t x, aptXHD_quantizer_100 * q);
 
 #ifdef __cplusplus
 }

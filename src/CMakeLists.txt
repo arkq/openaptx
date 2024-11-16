@@ -1,5 +1,5 @@
 # [open]aptx - CMakeLists.txt
-# Copyright (c) 2017-2021 Arkadiusz Bokowy
+# Copyright (c) 2017-2024 Arkadiusz Bokowy
 
 add_library(aptx SHARED)
 set_target_properties(aptx PROPERTIES
@@ -19,6 +19,7 @@ if(ENABLE_APTX422)
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/quantizer.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/search.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/main.c)
+	target_compile_features(aptx-4.2.2 PRIVATE c_std_11)
 	install(TARGETS aptx-4.2.2
 		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
@@ -32,6 +33,7 @@ if(ENABLE_APTXHD100)
 		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/quantizer.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/search.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptxhd100/main.c)
+	target_compile_features(aptxHD-1.0.0 PRIVATE c_std_11)
 	install(TARGETS aptxHD-1.0.0
 		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()

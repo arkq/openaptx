@@ -10,9 +10,9 @@
 
 #include <stdio.h>
 
-int bin2array(const char *variable, const char *filename) {
+int bin2array(const char * variable, const char * filename) {
 
-	FILE *in;
+	FILE * in;
 	if ((in = fopen(filename, "r")) == NULL)
 		return -1;
 
@@ -33,7 +33,7 @@ int bin2array(const char *variable, const char *filename) {
 	return 0;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char * argv[]) {
 
 	if (argc != 3) {
 		fprintf(stderr, "usage: %s <var> <file>\n", argv[0]);

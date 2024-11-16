@@ -1,0 +1,16 @@
+---
+BasedOnStyle: LLVM
+ColumnLimit: 120
+IndentWidth: 4
+TabWidth: 4
+---
+Language: Cpp
+AccessModifierOffset: -4
+AlignEscapedNewlines: DontAlign
+AllowShortFunctionsOnASingleLine: Inline
+Cpp11BracedListStyle: false
+IndentPPDirectives: AfterHash
+PointerAlignment: Middle
+SortIncludes: CaseInsensitive
+UseTab: ForIndentation
+---

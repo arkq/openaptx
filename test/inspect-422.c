@@ -14,10 +14,8 @@
 
 #include "inspect-utils.h"
 
-int aptX_prediction_filter_422_cmp(
-		const char *label,
-		const aptX_prediction_filter_422 *a,
-		const aptX_prediction_filter_422 *b) {
+int aptX_prediction_filter_422_cmp(const char * label, const aptX_prediction_filter_422 * a,
+                                   const aptX_prediction_filter_422 * b) {
 
 	char tmp[128];
 	int ret = 0;
@@ -54,10 +52,7 @@ int aptX_prediction_filter_422_cmp(
 	return ret;
 }
 
-int aptX_inverter_422_cmp(
-		const char *label,
-		const aptX_inverter_422 *a,
-		const aptX_inverter_422 *b) {
+int aptX_inverter_422_cmp(const char * label, const aptX_inverter_422 * a, const aptX_inverter_422 * b) {
 
 	char tmp[128];
 	int ret = 0;
@@ -65,11 +60,14 @@ int aptX_inverter_422_cmp(
 	sprintf(tmp, "%s.subband_param_p1", label);
 	ret |= diffmem(tmp, a->subband_param_p1, b->subband_param_p1, 0);
 	sprintf(tmp, "%s.subband_param_bit16_sl1", label);
-	ret |= diffmem(tmp, a->subband_param_bit16_sl1, b->subband_param_bit16_sl1, sizeof(*a->subband_param_bit16_sl1) * 3 /* XXX: arbitrary size */);
+	ret |= diffmem(tmp, a->subband_param_bit16_sl1, b->subband_param_bit16_sl1,
+	               sizeof(*a->subband_param_bit16_sl1) * 3 /* XXX: arbitrary size */);
 	sprintf(tmp, "%s.subband_param_dith16_sf1", label);
-	ret |= diffmem(tmp, a->subband_param_dith16_sf1, b->subband_param_dith16_sf1, sizeof(*a->subband_param_dith16_sf1) * 3 /* XXX: arbitrary size */);
+	ret |= diffmem(tmp, a->subband_param_dith16_sf1, b->subband_param_dith16_sf1,
+	               sizeof(*a->subband_param_dith16_sf1) * 3 /* XXX: arbitrary size */);
 	sprintf(tmp, "%s.subband_param_incr16", label);
-	ret |= diffmem(tmp, a->subband_param_incr16, b->subband_param_incr16, sizeof(*a->subband_param_incr16) * 3 /* XXX: arbitrary size */);
+	ret |= diffmem(tmp, a->subband_param_incr16, b->subband_param_incr16,
+	               sizeof(*a->subband_param_incr16) * 3 /* XXX: arbitrary size */);
 	sprintf(tmp, "%s.subband_param_unk1", label);
 	ret |= diffint(tmp, a->subband_param_unk1, b->subband_param_unk1);
 	sprintf(tmp, "%s.subband_param_unk2", label);
@@ -86,10 +84,7 @@ int aptX_inverter_422_cmp(
 	return ret;
 }
 
-int aptX_quantizer_422_cmp(
-		const char *label,
-		const aptX_quantizer_422 *a,
-		const aptX_quantizer_422 *b) {
+int aptX_quantizer_422_cmp(const char * label, const aptX_quantizer_422 * a, const aptX_quantizer_422 * b) {
 
 	char tmp[128];
 	int ret = 0;
@@ -99,11 +94,13 @@ int aptX_quantizer_422_cmp(
 	sprintf(tmp, "%s.subband_param_p1", label);
 	ret |= diffmem(tmp, a->subband_param_p1, b->subband_param_p1, 0);
 	sprintf(tmp, "%s.subband_param_bit16_sl1", label);
-	ret |= diffmem(tmp, a->subband_param_bit16_sl1, b->subband_param_bit16_sl1, sizeof(*a->subband_param_bit16_sl1) * 3 /* XXX: arbitrary size */);
+	ret |= diffmem(tmp, a->subband_param_bit16_sl1, b->subband_param_bit16_sl1,
+	               sizeof(*a->subband_param_bit16_sl1) * 3 /* XXX: arbitrary size */);
 	sprintf(tmp, "%s.subband_param_p3", label);
 	ret |= diffmem(tmp, a->subband_param_p3, b->subband_param_p3, 0);
 	sprintf(tmp, "%s.subband_param_mLamb16", label);
-	ret |= diffmem(tmp, a->subband_param_mLamb16, b->subband_param_mLamb16, sizeof(*a->subband_param_mLamb16) * 3 /* XXX: arbitrary size */);
+	ret |= diffmem(tmp, a->subband_param_mLamb16, b->subband_param_mLamb16,
+	               sizeof(*a->subband_param_mLamb16) * 3 /* XXX: arbitrary size */);
 	sprintf(tmp, "%s.unk1", label);
 	ret |= diffint(tmp, a->unk1, b->unk1);
 	sprintf(tmp, "%s.unk2", label);
@@ -114,16 +111,13 @@ int aptX_quantizer_422_cmp(
 	return ret;
 }
 
-int aptX_subband_encoder_422_cmp(
-		const char *label,
-		const aptX_subband_encoder_422 *a,
-		const aptX_subband_encoder_422 *b) {
+int aptX_subband_encoder_422_cmp(const char * label, const aptX_subband_encoder_422 * a,
+                                 const aptX_subband_encoder_422 * b) {
 
 	char tmp[128];
 	int ret = 0;
-	size_t i;
 
-	for (i = 0; i < __APTX_SUBBAND_MAX; i++) {
+	for (size_t i = 0; i < APTX_SUBBANDS; i++) {
 		sprintf(tmp, "%s.processor[%zd].filter", label, i);
 		ret |= aptX_prediction_filter_422_cmp(tmp, &a->processor[i].filter, &b->processor[i].filter);
 		sprintf(tmp, "%s.processor[%zd].inverter", label, i);
@@ -133,11 +127,11 @@ int aptX_subband_encoder_422_cmp(
 	ret |= diffint(tmp, a->codeword, b->codeword);
 	sprintf(tmp, "%s.dither_sign", label);
 	ret |= diffint(tmp, a->dither_sign, b->dither_sign);
-	for (i = 0; i < __APTX_SUBBAND_MAX; i++) {
+	for (size_t i = 0; i < APTX_SUBBANDS; i++) {
 		sprintf(tmp, "%s.dither[%zd]", label, i);
 		ret |= diffint(tmp, a->dither[i], b->dither[i]);
 	}
-	for (i = 0; i < __APTX_SUBBAND_MAX; i++) {
+	for (size_t i = 0; i < APTX_SUBBANDS; i++) {
 		sprintf(tmp, "%s.quantizer[%zd]", label, i);
 		ret |= aptX_quantizer_422_cmp(tmp, &a->quantizer[i], &b->quantizer[i]);
 	}
@@ -145,20 +139,16 @@ int aptX_subband_encoder_422_cmp(
 	return ret;
 }
 
-int aptX_QMF_analyzer_422_cmp(
-		const char *label,
-		const aptX_QMF_analyzer_422 *a,
-		const aptX_QMF_analyzer_422 *b) {
+int aptX_QMF_analyzer_422_cmp(const char * label, const aptX_QMF_analyzer_422 * a, const aptX_QMF_analyzer_422 * b) {
 
 	char tmp[128];
 	int ret = 0;
-	size_t i;
 
-	for (i = 0; i < 2; i++) {
+	for (size_t i = 0; i < 2; i++) {
 		sprintf(tmp, "%s.outer[%zd]", label, i);
 		ret |= diffmem(tmp, &a->outer[i], &b->outer[i], sizeof(a->outer[i]));
 	}
-	for (i = 0; i < 4; i++) {
+	for (size_t i = 0; i < 4; i++) {
 		sprintf(tmp, "%s.inner[%zd]", label, i);
 		ret |= diffmem(tmp, &a->inner[i], &b->inner[i], sizeof(a->inner[i]));
 	}
@@ -170,14 +160,10 @@ int aptX_QMF_analyzer_422_cmp(
 	return ret;
 }
 
-int aptX_encoder_422_cmp(
-		const char *label,
-		const aptX_encoder_422 *a,
-		const aptX_encoder_422 *b) {
+int aptX_encoder_422_cmp(const char * label, const aptX_encoder_422 * a, const aptX_encoder_422 * b) {
 
 	char tmp[128];
 	int ret = 0;
-	size_t i;
 
 	if (a == b)
 		return ret;
@@ -186,11 +172,11 @@ int aptX_encoder_422_cmp(
 	ret |= diffint(tmp, a->shift, b->shift);
 	sprintf(tmp, "%s.sync", label);
 	ret |= diffint(tmp, a->sync, b->sync);
-	for (i = 0; i < APTX_CHANNELS; i++) {
+	for (size_t i = 0; i < APTX_CHANNELS; i++) {
 		sprintf(tmp, "%s.encoder[%zd]", label, i);
 		ret |= aptX_subband_encoder_422_cmp(tmp, &a->encoder[i], &b->encoder[i]);
 	}
-	for (i = 0; i < APTX_CHANNELS; i++) {
+	for (size_t i = 0; i < APTX_CHANNELS; i++) {
 		sprintf(tmp, "%s.analyzer[%zd]", label, i);
 		ret |= aptX_QMF_analyzer_422_cmp(tmp, &a->analyzer[i], &b->analyzer[i]);
 	}

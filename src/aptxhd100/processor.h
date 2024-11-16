@@ -17,20 +17,11 @@
 extern "C" {
 #endif
 
-void aptXHD_invert_quantization(
-		int32_t a,
-		int32_t dither,
-		aptXHD_inverter_100 *i);
+void aptXHD_invert_quantization(int32_t a, int32_t dither, aptXHD_inverter_100 * i);
 
-void aptXHD_prediction_filtering(
-		int32_t a,
-		aptXHD_prediction_filter_100 *f);
+void aptXHD_prediction_filtering(int32_t a, aptXHD_prediction_filter_100 * f);
 
-void aptXHD_process_subband(
-		int32_t a,
-		int32_t dither,
-		aptXHD_prediction_filter_100 *f,
-		aptXHD_inverter_100 *i);
+void aptXHD_process_subband(int32_t a, int32_t dither, aptXHD_prediction_filter_100 * f, aptXHD_inverter_100 * i);
 
 #ifdef __cplusplus
 }

@@ -32,7 +32,7 @@
 #undef aptxbtenc_init
 #undef aptxbtenc_encodestereo
 
-static const char *getSubbandName(enum aptX_subband sb) {
+static const char * getSubbandName(enum aptX_subband sb) {
 	switch (sb) {
 	case APTX_SUBBAND_LL:
 		return "LL";
@@ -64,7 +64,6 @@ static int eval_init(size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -75,9 +74,7 @@ static int eval_AsmQmfConvO(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
-	size_t i;
-
-	for (i = 0; i < sizeof(coef) / sizeof(*coef); i++)
+	for (size_t i = 0; i < sizeof(coef) / sizeof(*coef); i++)
 		coef[i] = aptX_QMF_outer_coeffs[i];
 
 	while (nloops--) {
@@ -87,9 +84,9 @@ static int eval_AsmQmfConvO(size_t nloops, bool errstop) {
 		int16_t a1[16];
 		int16_t a2[16];
 
-		for (i = 0; i < sizeof(a1) / sizeof(*a1); i++)
+		for (size_t i = 0; i < sizeof(a1) / sizeof(*a1); i++)
 			a1[i] = rand();
-		for (i = 0; i < sizeof(a2) / sizeof(*a2); i++)
+		for (size_t i = 0; i < sizeof(a2) / sizeof(*a2); i++)
 			a2[i] = rand();
 
 		AsmQmfConvO(&a1[15], a2, coef, out_422);
@@ -100,7 +97,6 @@ static int eval_AsmQmfConvO(size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -111,9 +107,7 @@ static int eval_AsmQmfConvI(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
-	size_t i;
-
-	for (i = 0; i < sizeof(coef) / sizeof(*coef); i++)
+	for (size_t i = 0; i < sizeof(coef) / sizeof(*coef); i++)
 		coef[i] = aptX_QMF_inner_coeffs[i];
 
 	while (nloops--) {
@@ -123,9 +117,9 @@ static int eval_AsmQmfConvI(size_t nloops, bool errstop) {
 		int32_t a1[16];
 		int32_t a2[16];
 
-		for (i = 0; i < sizeof(a1) / sizeof(*a1); i++)
+		for (size_t i = 0; i < sizeof(a1) / sizeof(*a1); i++)
 			a1[i] = rand();
-		for (i = 0; i < sizeof(a2) / sizeof(*a2); i++)
+		for (size_t i = 0; i < sizeof(a2) / sizeof(*a2); i++)
 			a2[i] = rand();
 
 		AsmQmfConvI(&a1[15], a2, coef, out_422);
@@ -136,7 +130,6 @@ static int eval_AsmQmfConvI(size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -181,7 +174,6 @@ static int eval_Bsearch(enum aptX_subband sb, size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -194,10 +186,9 @@ static int eval_packCodeword(size_t nloops, bool errstop) {
 	while (nloops--) {
 
 		aptX_subband_encoder_422 e = { 0 };
-		size_t i;
 
 		e.dither_sign = rand();
-		for (i = 0; i < __APTX_SUBBAND_MAX; i++)
+		for (size_t i = 0; i < APTX_SUBBANDS; i++)
 			e.quantizer[i].unk1 = rand();
 
 		uint16_t o_422 = packCodeword(&e);
@@ -208,7 +199,6 @@ static int eval_packCodeword(size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -221,8 +211,8 @@ static int eval_quantiseDifference(enum aptX_subband sb, size_t nloops, bool err
 	aptX_encoder_422 enc;
 	aptX_init(&enc, 0);
 
-	aptX_quantizer_422 *q_422 = &enc.encoder[0].quantizer[sb];
-	aptX_quantizer_422 *q_new = &enc.encoder[1].quantizer[sb];
+	aptX_quantizer_422 * q_422 = &enc.encoder[0].quantizer[sb];
+	aptX_quantizer_422 * q_new = &enc.encoder[1].quantizer[sb];
 
 	while (nloops--) {
 
@@ -258,7 +248,6 @@ static int eval_quantiseDifference(enum aptX_subband sb, size_t nloops, bool err
 				return -1;
 			memcpy(q_new, q_422, sizeof(*q_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -271,10 +260,10 @@ static int eval_aptxEncode(size_t nloops, bool errstop) {
 	aptX_encoder_422 enc;
 	aptX_init(&enc, 0);
 
-	aptX_QMF_analyzer_422 *a_422 = &enc.analyzer[0];
-	aptX_QMF_analyzer_422 *a_new = &enc.analyzer[1];
-	aptX_subband_encoder_422 *e_422 = &enc.encoder[0];
-	aptX_subband_encoder_422 *e_new = &enc.encoder[1];
+	aptX_QMF_analyzer_422 * a_422 = &enc.analyzer[0];
+	aptX_QMF_analyzer_422 * a_new = &enc.analyzer[1];
+	aptX_subband_encoder_422 * e_422 = &enc.encoder[0];
+	aptX_subband_encoder_422 * e_new = &enc.encoder[1];
 
 	while (nloops--) {
 
@@ -293,7 +282,6 @@ static int eval_aptxEncode(size_t nloops, bool errstop) {
 			memcpy(a_new, a_422, sizeof(*a_new));
 			memcpy(e_new, e_422, sizeof(*e_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -306,8 +294,8 @@ static int eval_invertQuantisation(enum aptX_subband sb, size_t nloops, bool err
 	aptX_encoder_422 enc;
 	aptX_init(&enc, 0);
 
-	aptX_inverter_422 *i_422 = &enc.encoder[0].processor[sb].inverter;
-	aptX_inverter_422 *i_new = &enc.encoder[1].processor[sb].inverter;
+	aptX_inverter_422 * i_422 = &enc.encoder[0].processor[sb].inverter;
+	aptX_inverter_422 * i_new = &enc.encoder[1].processor[sb].inverter;
 
 	while (nloops--) {
 
@@ -335,7 +323,6 @@ static int eval_invertQuantisation(enum aptX_subband sb, size_t nloops, bool err
 				return -1;
 			memcpy(i_new, i_422, sizeof(*i_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -348,8 +335,8 @@ static int eval_performPredictionFiltering(enum aptX_subband sb, size_t nloops, 
 	aptX_encoder_422 enc;
 	aptX_init(&enc, 0);
 
-	aptX_prediction_filter_422 *f_422 = &enc.encoder[0].processor[sb].filter;
-	aptX_prediction_filter_422 *f_new = &enc.encoder[1].processor[sb].filter;
+	aptX_prediction_filter_422 * f_422 = &enc.encoder[0].processor[sb].filter;
+	aptX_prediction_filter_422 * f_new = &enc.encoder[1].processor[sb].filter;
 
 	while (nloops--) {
 
@@ -375,7 +362,6 @@ static int eval_performPredictionFiltering(enum aptX_subband sb, size_t nloops, 
 				return -1;
 			memcpy(f_new, f_422, sizeof(*f_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -388,10 +374,10 @@ static int eval_processSubband(enum aptX_subband sb, size_t nloops, bool errstop
 	aptX_encoder_422 enc;
 	aptX_init(&enc, 0);
 
-	aptX_prediction_filter_422 *f_422 = &enc.encoder[0].processor[sb].filter;
-	aptX_prediction_filter_422 *f_new = &enc.encoder[1].processor[sb].filter;
-	aptX_inverter_422 *i_422 = &enc.encoder[0].processor[sb].inverter;
-	aptX_inverter_422 *i_new = &enc.encoder[1].processor[sb].inverter;
+	aptX_prediction_filter_422 * f_422 = &enc.encoder[0].processor[sb].filter;
+	aptX_prediction_filter_422 * f_new = &enc.encoder[1].processor[sb].filter;
+	aptX_inverter_422 * i_422 = &enc.encoder[0].processor[sb].inverter;
+	aptX_inverter_422 * i_new = &enc.encoder[1].processor[sb].inverter;
 
 	while (nloops--) {
 
@@ -423,7 +409,6 @@ static int eval_processSubband(enum aptX_subband sb, size_t nloops, bool errstop
 			memcpy(f_new, f_422, sizeof(*f_new));
 			memcpy(i_new, i_422, sizeof(*i_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -449,7 +434,6 @@ static int eval_insertSync(size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -483,14 +467,13 @@ static int eval_aptxbtenc_encodestereo(size_t nloops, bool errstop) {
 				return -1;
 			memcpy(&enc_new, &enc_422, sizeof(enc_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
 	return 0;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char * argv[]) {
 
 	bool errstop = true;
 	size_t nloops = 1;

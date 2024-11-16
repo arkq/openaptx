@@ -9,11 +9,11 @@
  */
 
 #if HAVE_CONFIG_H
-# include <config.h>
+#	include <config.h>
 #endif
 
-#include <errno.h>
 #include <endian.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,52 +25,52 @@
 
 #if APTXHD
 
-# define APTX_AV_CODEC_ID AV_CODEC_ID_APTX_HD
-# define APTX_AV_PCM_SAMPLE_SHIFT 8
-# define APTX_STREAM_DATA_SIZE 6
+#	define APTX_AV_CODEC_ID AV_CODEC_ID_APTX_HD
+#	define APTX_AV_PCM_SAMPLE_SHIFT 8
+#	define APTX_STREAM_DATA_SIZE 6
 
-# define _aptxenc_new_ NewAptxhdEnc
-# define _aptxenc_size_ SizeofAptxhdbtenc
-# define _aptxenc_init_ aptxhdbtenc_init
-# define _aptxenc_destroy_ aptxhdbtenc_destroy
-# define _aptxenc_encode_ aptxhdbtenc_encodestereo
-# define _aptxenc_build_ aptxhdbtenc_build
-# define _aptxenc_version_ aptxhdbtenc_version
+#	define _aptxenc_new_ NewAptxhdEnc
+#	define _aptxenc_size_ SizeofAptxhdbtenc
+#	define _aptxenc_init_ aptxhdbtenc_init
+#	define _aptxenc_destroy_ aptxhdbtenc_destroy
+#	define _aptxenc_encode_ aptxhdbtenc_encodestereo
+#	define _aptxenc_build_ aptxhdbtenc_build
+#	define _aptxenc_version_ aptxhdbtenc_version
 
-# define _aptxdec_size_ SizeofAptxhdbtdec
-# define _aptxdec_init_ aptxhdbtdec_init
-# define _aptxdec_destroy_ aptxhdbtdec_destroy
-# define _aptxdec_decode_ aptxhdbtdec_decodestereo
-# define _aptxdec_build_ aptxhdbtdec_build
-# define _aptxdec_version_ aptxhdbtdec_version
+#	define _aptxdec_size_ SizeofAptxhdbtdec
+#	define _aptxdec_init_ aptxhdbtdec_init
+#	define _aptxdec_destroy_ aptxhdbtdec_destroy
+#	define _aptxdec_decode_ aptxhdbtdec_decodestereo
+#	define _aptxdec_build_ aptxhdbtdec_build
+#	define _aptxdec_version_ aptxhdbtdec_version
 
 #else
 
-# define APTX_AV_CODEC_ID AV_CODEC_ID_APTX
-# define APTX_AV_PCM_SAMPLE_SHIFT 16
-# define APTX_STREAM_DATA_SIZE 4
+#	define APTX_AV_CODEC_ID AV_CODEC_ID_APTX
+#	define APTX_AV_PCM_SAMPLE_SHIFT 16
+#	define APTX_STREAM_DATA_SIZE 4
 
-# define _aptxenc_new_ NewAptxEnc
-# define _aptxenc_size_ SizeofAptxbtenc
-# define _aptxenc_init_ aptxbtenc_init
-# define _aptxenc_destroy_ aptxbtenc_destroy
-# define _aptxenc_encode_ aptxbtenc_encodestereo
-# define _aptxenc_build_ aptxbtenc_build
-# define _aptxenc_version_ aptxbtenc_version
+#	define _aptxenc_new_ NewAptxEnc
+#	define _aptxenc_size_ SizeofAptxbtenc
+#	define _aptxenc_init_ aptxbtenc_init
+#	define _aptxenc_destroy_ aptxbtenc_destroy
+#	define _aptxenc_encode_ aptxbtenc_encodestereo
+#	define _aptxenc_build_ aptxbtenc_build
+#	define _aptxenc_version_ aptxbtenc_version
 
-# define _aptxdec_size_ SizeofAptxbtdec
-# define _aptxdec_init_ aptxbtdec_init
-# define _aptxdec_destroy_ aptxbtdec_destroy
-# define _aptxdec_decode_ aptxbtdec_decodestereo
-# define _aptxdec_build_ aptxbtdec_build
-# define _aptxdec_version_ aptxbtdec_version
+#	define _aptxdec_size_ SizeofAptxbtdec
+#	define _aptxdec_init_ aptxbtdec_init
+#	define _aptxdec_destroy_ aptxbtdec_destroy
+#	define _aptxdec_decode_ aptxbtdec_decodestereo
+#	define _aptxdec_build_ aptxbtdec_build
+#	define _aptxdec_version_ aptxbtdec_version
 
 #endif
 
 struct internal_ctx {
-	AVCodecContext *av_ctx;
-	AVPacket *av_packet;
-	AVFrame *av_frame;
+	AVCodecContext * av_ctx;
+	AVPacket * av_packet;
+	AVFrame * av_frame;
 	/* codeword swapping */
 	unsigned int shift_hi;
 	unsigned int shift_lo;
@@ -78,16 +78,15 @@ struct internal_ctx {
 	unsigned int magic;
 };
 
-#define error(M, ...) \
-	fprintf(stderr, "openaptx: ffmpeg apt-X: " M "\n", ## __VA_ARGS__)
+#define error(M, ...) fprintf(stderr, "openaptx: ffmpeg apt-X: " M "\n", ##__VA_ARGS__)
 
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 9, 100)
-static void __attribute__ ((constructor)) _init() {
+static void __attribute__((constructor)) _init() {
 	avcodec_register_all();
 }
 #endif
 
-static int internal_ctx_init(struct internal_ctx *ctx, short endian) {
+static int internal_ctx_init(struct internal_ctx * ctx, short endian) {
 
 	ctx->av_ctx = NULL;
 	ctx->av_packet = NULL;
@@ -106,7 +105,7 @@ static int internal_ctx_init(struct internal_ctx *ctx, short endian) {
 	return 0;
 }
 
-static int internal_ctx_codec_init(struct internal_ctx *ctx, const AVCodec *codec) {
+static int internal_ctx_codec_init(struct internal_ctx * ctx, const AVCodec * codec) {
 
 	char errmsg[128];
 	int rv;
@@ -133,8 +132,8 @@ static int internal_ctx_codec_init(struct internal_ctx *ctx, const AVCodec *code
 #if ENABLE_APTX_ENCODER_API
 int _aptxenc_init_(APTXENC enc, short endian) {
 
-	struct internal_ctx *ctx = enc;
-	const AVCodec *codec;
+	struct internal_ctx * ctx = enc;
+	const AVCodec * codec;
 	char errmsg[128];
 	int rv;
 
@@ -190,8 +189,8 @@ fail:
 #if ENABLE_APTX_DECODER_API
 int _aptxdec_init_(APTXDEC dec, short endian) {
 
-	struct internal_ctx *ctx = dec;
-	const AVCodec *codec;
+	struct internal_ctx * ctx = dec;
+	const AVCodec * codec;
 	int rv;
 
 	internal_ctx_init(ctx, endian);
@@ -225,7 +224,7 @@ fail:
 }
 #endif
 
-static void internal_ctx_destroy(struct internal_ctx *ctx) {
+static void internal_ctx_destroy(struct internal_ctx * ctx) {
 	if (ctx != NULL)
 		return;
 	av_frame_free(&ctx->av_frame);
@@ -245,8 +244,7 @@ void _aptxdec_destroy_(APTXDEC dec) {
 }
 #endif
 
-static int internal_ctx_encode(struct internal_ctx *ctx,
-		const int32_t pcmL[4], const int32_t pcmR[4]) {
+static int internal_ctx_encode(struct internal_ctx * ctx, const int32_t pcmL[4], const int32_t pcmR[4]) {
 
 	char errmsg[128];
 	int rv;
@@ -258,8 +256,8 @@ static int internal_ctx_encode(struct internal_ctx *ctx,
 		goto fail;
 	}
 
-	int32_t *samples_l = (int32_t *)ctx->av_frame->data[0];
-	int32_t *samples_r = (int32_t *)ctx->av_frame->data[1];
+	int32_t * samples_l = (int32_t *)ctx->av_frame->data[0];
+	int32_t * samples_r = (int32_t *)ctx->av_frame->data[1];
 
 	for (size_t i = 0; i < 4; i++) {
 		samples_l[i] = pcmL[i] << APTX_AV_PCM_SAMPLE_SHIFT;
@@ -296,36 +294,35 @@ fail:
 }
 
 #if ENABLE_APTX_ENCODER_API
-#if APTXHD
+#	if APTXHD
 int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint32_t code[2]) {
-#else
+#	else
 int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint16_t code[2]) {
-#endif
+#	endif
 
-	struct internal_ctx *ctx = enc;
+	struct internal_ctx * ctx = enc;
 	if (internal_ctx_encode(ctx, pcmL, pcmR) != 0)
 		return -1;
 
-	uint8_t *data = ctx->av_packet->data;
+	uint8_t * data = ctx->av_packet->data;
 
-#if APTXHD
+#	if APTXHD
 	/* keep endianness swapping bug from apt-X HD */
 	code[0] = data[0] << 16 | data[1] << 8 | data[2];
 	code[1] = data[3] << 16 | data[4] << 8 | data[5];
-#else
+#	else
 	const unsigned int shift_hi = ctx->shift_hi;
 	const unsigned int shift_lo = ctx->shift_lo;
 	code[0] = data[0] << shift_hi | data[1] << shift_lo;
 	code[1] = data[2] << shift_hi | data[3] << shift_lo;
-#endif
+#	endif
 
 	av_packet_unref(ctx->av_packet);
 	return 0;
 }
 #endif
 
-static int internal_ctx_decode(struct internal_ctx *ctx,
-		const uint8_t *data, size_t data_size) {
+static int internal_ctx_decode(struct internal_ctx * ctx, const uint8_t * data, size_t data_size) {
 
 	char errmsg[128];
 	int rv;
@@ -364,30 +361,28 @@ static int internal_ctx_decode(struct internal_ctx *ctx,
 }
 
 #if ENABLE_APTX_DECODER_API
-#if APTXHD
+#	if APTXHD
 int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint32_t code[2]) {
-#else
+#	else
 int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16_t code[2]) {
-#endif
+#	endif
 
-	struct internal_ctx *ctx = dec;
+	struct internal_ctx * ctx = dec;
 	const unsigned int shift_hi = ctx->shift_hi;
 	const unsigned int shift_lo = ctx->shift_lo;
 	int rv;
 
-#if APTXHD
-	const uint8_t data[APTX_STREAM_DATA_SIZE] = {
-		code[0] >> shift_hi, code[0] >> 8, code[0] >> shift_lo,
-		code[1] >> shift_hi, code[1] >> 8, code[1] >> shift_lo	};
-#else
-	const uint8_t data[APTX_STREAM_DATA_SIZE] = {
-		code[0] >> shift_hi, code[0] >> shift_lo,
-		code[1] >> shift_hi, code[1] >> shift_lo };
-#endif
+#	if APTXHD
+	const uint8_t data[APTX_STREAM_DATA_SIZE] = { code[0] >> shift_hi, code[0] >> 8, code[0] >> shift_lo,
+		                                          code[1] >> shift_hi, code[1] >> 8, code[1] >> shift_lo };
+#	else
+	const uint8_t data[APTX_STREAM_DATA_SIZE] = { code[0] >> shift_hi, code[0] >> shift_lo, code[1] >> shift_hi,
+		                                          code[1] >> shift_lo };
+#	endif
 
 	/* reinitialize decoder if new stream was detection */
 	if (code[0] == code[1] && code[0] == ctx->magic) {
-		const AVCodec *codec = ctx->av_ctx->codec;
+		const AVCodec * codec = ctx->av_ctx->codec;
 		avcodec_free_context(&ctx->av_ctx);
 		if ((rv = internal_ctx_codec_init(ctx, codec)) != 0) {
 			error("AV codec reinitialization failed");
@@ -398,8 +393,8 @@ int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16
 	if ((rv = internal_ctx_decode(ctx, data, sizeof(data))) != 0)
 		return errno = -rv, -1;
 
-	int32_t *samples_l = (int32_t *)ctx->av_frame->data[0];
-	int32_t *samples_r = (int32_t *)ctx->av_frame->data[1];
+	int32_t * samples_l = (int32_t *)ctx->av_frame->data[0];
+	int32_t * samples_r = (int32_t *)ctx->av_frame->data[1];
 
 	for (size_t i = 0; i < 4; i++) {
 		pcmL[i] = samples_l[i] >> APTX_AV_PCM_SAMPLE_SHIFT;
@@ -411,25 +406,25 @@ int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16
 #endif
 
 #if ENABLE_APTX_ENCODER_API
-const char *_aptxenc_build_(void) {
+const char * _aptxenc_build_(void) {
 	return PACKAGE_NAME "-ffmpeg-" PACKAGE_VERSION;
 }
 #endif
 
 #if ENABLE_APTX_DECODER_API
-const char *_aptxdec_build_(void) {
+const char * _aptxdec_build_(void) {
 	return PACKAGE_NAME "-ffmpeg-" PACKAGE_VERSION;
 }
 #endif
 
 #if ENABLE_APTX_ENCODER_API
-const char *_aptxenc_version_(void) {
+const char * _aptxenc_version_(void) {
 	return PACKAGE_VERSION;
 }
 #endif
 
 #if ENABLE_APTX_DECODER_API
-const char *_aptxdec_version_(void) {
+const char * _aptxdec_version_(void) {
 	return PACKAGE_VERSION;
 }
 #endif

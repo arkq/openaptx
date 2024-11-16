@@ -33,7 +33,7 @@
 #undef aptxhdbtenc_init
 #undef aptxhdbtenc_encodestereo
 
-static const char *getSubbandName(enum aptXHD_subband sb) {
+static const char * getSubbandName(enum aptXHD_subband sb) {
 	switch (sb) {
 	case APTXHD_SUBBAND_LL:
 		return "LL";
@@ -52,10 +52,10 @@ static int eval_init(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	static const int param_sizes[4] = {
-		[APTXHD_SUBBAND_LL] = sizeof(aptXHD_q9incr16) / sizeof(*aptXHD_q9incr16),
-		[APTXHD_SUBBAND_LH] = sizeof(aptXHD_q6incr16) / sizeof(*aptXHD_q6incr16),
-		[APTXHD_SUBBAND_HL] = sizeof(aptXHD_q4incr16) / sizeof(*aptXHD_q4incr16),
-		[APTXHD_SUBBAND_HH] = sizeof(aptXHD_q5incr16) / sizeof(*aptXHD_q5incr16),
+		[APTXHD_SUBBAND_LL] = sizeof(aptXHD_q9incr24) / sizeof(*aptXHD_q9incr24),
+		[APTXHD_SUBBAND_LH] = sizeof(aptXHD_q6incr24) / sizeof(*aptXHD_q6incr24),
+		[APTXHD_SUBBAND_HL] = sizeof(aptXHD_q4incr24) / sizeof(*aptXHD_q4incr24),
+		[APTXHD_SUBBAND_HH] = sizeof(aptXHD_q5incr24) / sizeof(*aptXHD_q5incr24),
 	};
 
 	while (nloops--) {
@@ -67,25 +67,21 @@ static int eval_init(size_t nloops, bool errstop) {
 		aptxhdbtenc_init(&enc_100, endian);
 		aptXHD_init(&enc_new, endian);
 
-		int c, b, i, ret = 0;
+		int c, b, ret = 0;
 		for (c = 0; c < APTXHD_CHANNELS; c++)
-			for (b = 0; b < __APTXHD_SUBBAND_MAX; b++) {
-				for (i = 0; i < param_sizes[b]; i++)
-					ret |= diffint("bit16",
-						enc_new.encoder[c].processor[b].inverter.subband_param_bit16_sl1[i],
-						enc_100.encoder[c].processor[b].inverter.subband_param_bit16_sl1[i]);
-				for (i = 0; i < param_sizes[i]; i++)
-					ret |= diffint("dith16",
-						enc_new.encoder[c].processor[b].inverter.subband_param_dith16_sf1[i],
-						enc_100.encoder[c].processor[b].inverter.subband_param_dith16_sf1[i]);
-				for (i = 0; i < param_sizes[i]; i++)
-					ret |= diffint("mLamb16",
-						enc_new.encoder[c].quantizer[b].subband_param_mLamb16[i],
-						enc_100.encoder[c].quantizer[b].subband_param_mLamb16[i]);
-				for (i = 0; i < param_sizes[i]; i++)
-					ret |= diffint("incr16",
-						enc_new.encoder[c].processor[b].inverter.subband_param_incr16[i],
-						enc_100.encoder[c].processor[b].inverter.subband_param_incr16[i]);
+			for (b = 0; b < APTXHD_SUBBANDS; b++) {
+				for (size_t i = 0; i < param_sizes[b]; i++)
+					ret |= diffint("bit16", enc_new.encoder[c].processor[b].inverter.subband_param_bit16_sl1[i],
+					               enc_100.encoder[c].processor[b].inverter.subband_param_bit16_sl1[i]);
+				for (size_t i = 0; i < param_sizes[i]; i++)
+					ret |= diffint("dith16", enc_new.encoder[c].processor[b].inverter.subband_param_dith16_sf1[i],
+					               enc_100.encoder[c].processor[b].inverter.subband_param_dith16_sf1[i]);
+				for (size_t i = 0; i < param_sizes[i]; i++)
+					ret |= diffint("mLamb16", enc_new.encoder[c].quantizer[b].subband_param_mLamb16[i],
+					               enc_100.encoder[c].quantizer[b].subband_param_mLamb16[i]);
+				for (size_t i = 0; i < param_sizes[i]; i++)
+					ret |= diffint("incr16", enc_new.encoder[c].processor[b].inverter.subband_param_incr16[i],
+					               enc_100.encoder[c].processor[b].inverter.subband_param_incr16[i]);
 			}
 
 		if (aptXHD_encoder_100_cmp("\tenc", &enc_new, &enc_100) || ret) {
@@ -93,7 +89,6 @@ static int eval_init(size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -104,9 +99,7 @@ static int eval_AsmQmfConvO(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
-	size_t i;
-
-	for (i = 0; i < sizeof(coef) / sizeof(*coef); i++)
+	for (size_t i = 0; i < sizeof(coef) / sizeof(*coef); i++)
 		coef[i] = aptXHD_QMF_outer_coeffs[i];
 
 	while (nloops--) {
@@ -116,9 +109,9 @@ static int eval_AsmQmfConvO(size_t nloops, bool errstop) {
 		int32_t a1[16];
 		int32_t a2[16];
 
-		for (i = 0; i < sizeof(a1) / sizeof(*a1); i++)
+		for (size_t i = 0; i < sizeof(a1) / sizeof(*a1); i++)
 			a1[i] = rand();
-		for (i = 0; i < sizeof(a2) / sizeof(*a2); i++)
+		for (size_t i = 0; i < sizeof(a2) / sizeof(*a2); i++)
 			a2[i] = rand();
 
 		AsmQmfConvO(&a1[15], a2, coef, out_100);
@@ -129,7 +122,6 @@ static int eval_AsmQmfConvO(size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -140,9 +132,7 @@ static int eval_AsmQmfConvI(size_t nloops, bool errstop) {
 	fprintf(stderr, "%s: ", __func__);
 
 	int32_t coef[16];
-	size_t i;
-
-	for (i = 0; i < sizeof(coef) / sizeof(*coef); i++)
+	for (size_t i = 0; i < sizeof(coef) / sizeof(*coef); i++)
 		coef[i] = aptXHD_QMF_inner_coeffs[i];
 
 	while (nloops--) {
@@ -152,9 +142,9 @@ static int eval_AsmQmfConvI(size_t nloops, bool errstop) {
 		int32_t a1[16];
 		int32_t a2[16];
 
-		for (i = 0; i < sizeof(a1) / sizeof(*a1); i++)
+		for (size_t i = 0; i < sizeof(a1) / sizeof(*a1); i++)
 			a1[i] = rand();
-		for (i = 0; i < sizeof(a2) / sizeof(*a2); i++)
+		for (size_t i = 0; i < sizeof(a2) / sizeof(*a2); i++)
 			a2[i] = rand();
 
 		AsmQmfConvI(&a1[15], a2, coef, out_100);
@@ -165,7 +155,6 @@ static int eval_AsmQmfConvI(size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -186,8 +175,8 @@ static int eval_Bsearch(enum aptXHD_subband sb, size_t nloops, bool errstop) {
 
 		switch (sb) {
 		case APTXHD_SUBBAND_LH:
-			o_100 = BsearchLH(a, x, aptXHD_dq6bit16_sl1);
-			o_new = aptXHD_search_LH(a, x, aptXHD_dq6bit16_sl1);
+			o_100 = BsearchLH(a, x, aptXHD_dq6bit24_sl1);
+			o_new = aptXHD_search_LH(a, x, aptXHD_dq6bit24_sl1);
 			break;
 		default:
 			fprintf(stderr, "%s sub-band function not available\n", getSubbandName(sb));
@@ -199,7 +188,6 @@ static int eval_Bsearch(enum aptXHD_subband sb, size_t nloops, bool errstop) {
 			if (errstop)
 				return -1;
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -212,8 +200,8 @@ static int eval_quantiseDifference(enum aptXHD_subband sb, size_t nloops, bool e
 	aptXHD_encoder_100 enc;
 	aptXHD_init(&enc, 0);
 
-	aptXHD_quantizer_100 *q_100 = &enc.encoder[0].quantizer[sb];
-	aptXHD_quantizer_100 *q_new = &enc.encoder[1].quantizer[sb];
+	aptXHD_quantizer_100 * q_100 = &enc.encoder[0].quantizer[sb];
+	aptXHD_quantizer_100 * q_new = &enc.encoder[1].quantizer[sb];
 
 	while (nloops--) {
 
@@ -249,7 +237,6 @@ static int eval_quantiseDifference(enum aptXHD_subband sb, size_t nloops, bool e
 				return -1;
 			memcpy(q_new, q_100, sizeof(*q_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -262,10 +249,10 @@ static int eval_processSubband(enum aptXHD_subband sb, size_t nloops, bool errst
 	aptXHD_encoder_100 enc;
 	aptXHD_init(&enc, 0);
 
-	aptXHD_prediction_filter_100 *f_100 = &enc.encoder[0].processor[sb].filter;
-	aptXHD_prediction_filter_100 *f_new = &enc.encoder[1].processor[sb].filter;
-	aptXHD_inverter_100 *i_100 = &enc.encoder[0].processor[sb].inverter;
-	aptXHD_inverter_100 *i_new = &enc.encoder[1].processor[sb].inverter;
+	aptXHD_prediction_filter_100 * f_100 = &enc.encoder[0].processor[sb].filter;
+	aptXHD_prediction_filter_100 * f_new = &enc.encoder[1].processor[sb].filter;
+	aptXHD_inverter_100 * i_100 = &enc.encoder[0].processor[sb].inverter;
+	aptXHD_inverter_100 * i_new = &enc.encoder[1].processor[sb].inverter;
 
 	while (nloops--) {
 
@@ -305,7 +292,6 @@ static int eval_processSubband(enum aptXHD_subband sb, size_t nloops, bool errst
 			memcpy(f_new, f_100, sizeof(*f_new));
 			memcpy(i_new, i_100, sizeof(*i_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
@@ -339,14 +325,13 @@ static int eval_aptxbtenc_encodestereo(size_t nloops, bool errstop) {
 				return -1;
 			memcpy(&enc_new, &enc_100, sizeof(enc_new));
 		}
-
 	}
 
 	fprintf(stderr, "OK\n");
 	return 0;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char * argv[]) {
 
 	bool errstop = true;
 	size_t nloops = 1;

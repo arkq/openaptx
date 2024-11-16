@@ -13,11 +13,7 @@
 #include "mathex.h"
 #include "search.h"
 
-static void aptXHD_quantize_difference(
-		int32_t diff,
-		int32_t dither,
-		int32_t quant,
-		aptXHD_quantizer_100 *q) {
+static void aptXHD_quantize_difference(int32_t diff, int32_t dither, int32_t quant, aptXHD_quantizer_100 * q) {
 
 	int32_t sl1_0 = q->subband_param_bit16_sl1[q->unk1];
 	int32_t sl1_1 = q->subband_param_bit16_sl1[q->unk1 + 1];
@@ -40,8 +36,7 @@ static void aptXHD_quantize_difference(
 		q->unk2 = q->unk1;
 		q->unk1 = q->unk1 - 1;
 		q->unk3 = -q->unk3;
-	}
-	else {
+	} else {
 		q->unk1 = q->unk1;
 		q->unk2 = q->unk1 - 1;
 	}
@@ -50,47 +45,30 @@ static void aptXHD_quantize_difference(
 		q->unk1 = ~q->unk1;
 		q->unk2 = ~q->unk2;
 	}
-
 }
 
-void aptXHD_quantize_difference_LL(
-		int32_t diff,
-		int32_t dither,
-		int32_t x,
-		aptXHD_quantizer_100 *q) {
+void aptXHD_quantize_difference_LL(int32_t diff, int32_t dither, int32_t x, aptXHD_quantizer_100 * q) {
 	int absdiff = abs32(diff);
 	clamp_int24_t(absdiff);
 	q->unk1 = aptXHD_search_LL(absdiff >> 4, x, q->subband_param_bit16_sl1);
 	aptXHD_quantize_difference(diff, dither, x, q);
 }
 
-void aptXHD_quantize_difference_LH(
-		int32_t diff,
-		int32_t dither,
-		int32_t x,
-		aptXHD_quantizer_100 *q) {
+void aptXHD_quantize_difference_LH(int32_t diff, int32_t dither, int32_t x, aptXHD_quantizer_100 * q) {
 	int absdiff = abs32(diff);
 	clamp_int24_t(absdiff);
 	q->unk1 = aptXHD_search_LH(absdiff >> 4, x, q->subband_param_bit16_sl1);
 	aptXHD_quantize_difference(diff, dither, x, q);
 }
 
-void aptXHD_quantize_difference_HL(
-		int32_t diff,
-		int32_t dither,
-		int32_t x,
-		aptXHD_quantizer_100 *q) {
+void aptXHD_quantize_difference_HL(int32_t diff, int32_t dither, int32_t x, aptXHD_quantizer_100 * q) {
 	int absdiff = abs32(diff);
 	clamp_int24_t(absdiff);
 	q->unk1 = aptXHD_search_HL(absdiff >> 4, x, q->subband_param_bit16_sl1);
 	aptXHD_quantize_difference(diff, dither, x, q);
 }
 
-void aptXHD_quantize_difference_HH(
-		int32_t diff,
-		int32_t dither,
-		int32_t x,
-		aptXHD_quantizer_100 *q) {
+void aptXHD_quantize_difference_HH(int32_t diff, int32_t dither, int32_t x, aptXHD_quantizer_100 * q) {
 	int absdiff = abs32(diff);
 	clamp_int24_t(absdiff);
 	q->unk1 = aptXHD_search_HH(absdiff >> 4, x, q->subband_param_bit16_sl1);
