@@ -34,7 +34,9 @@ void aptX_prediction_filtering(int32_t a, aptX_prediction_filter_422 * f) {
 	int32_t tmp1 = a + f->unk8;
 	clamp_int24_t(tmp1);
 
-	int32_t tmp2 = ((int64_t)tmp1 * f->unk2 + (int64_t)f->unk3 * f->unk6) >> 22;
+	int64_t x1 = (int64_t)f->unk3 * f->unk6;
+	int64_t x2 = (int64_t)tmp1 * f->unk2;
+	int32_t tmp2 = (x1 + x2) >> 22;
 	clamp_int24_t(tmp2);
 
 	int32_t v1 = 128;
@@ -44,24 +46,21 @@ void aptX_prediction_filtering(int32_t a, aptX_prediction_filter_422 * f) {
 		v2 = ((a >> 31) & 0xFF000000) + 8388736;
 	}
 
-	int32_t * q = &f->arr2[f->i + f->width];
+	size_t q = f->i + f->width;
 	int64_t sum = 0;
-	int32_t c = a;
-
-	f->i = (f->i + 1) % f->width;
-	f->subband_param_unk3_3 = a;
+	int64_t c = a;
 
 	for (size_t i = 0; i < (size_t)f->width; i++, q--) {
 
 		int32_t tmp;
-		if (*q >= 0)
+		if (f->arr2[q] >= 0)
 			tmp = v2 - f->arr1[i];
 		else
 			tmp = v1 - f->arr1[i];
 
 		f->arr1[i] += (tmp >> 8) - (((uint32_t)tmp) << 23 == 0x80000000);
-		sum += (int64_t)f->arr1[i] * c;
-		c = *q;
+		sum += c * f->arr1[i];
+		c = f->arr2[q];
 	}
 
 	f->unk6 = tmp1;
@@ -69,6 +68,8 @@ void aptX_prediction_filtering(int32_t a, aptX_prediction_filter_422 * f) {
 	clamp_int24_t(f->unk7);
 	f->unk8 = f->unk7 + tmp2;
 	clamp_int24_t(f->unk8);
+
+	f->i = (f->i + 1) % f->width;
 
 	f->arr2[f->i] = a;
 	f->arr2[f->i + f->width] = a;
@@ -88,15 +89,15 @@ void aptX_process_subband(int32_t a, int32_t dither, aptX_prediction_filter_422 
 		f->sign2 = f->sign1;
 		f->sign1 = -1;
 	}
-	if (tmp == 0) {
-		sign1 *= 0;
-		sign2 *= 0;
+	else if (tmp > 0) {
+		sign1 *= 1;
+		sign2 *= 1;
 		f->sign2 = f->sign1;
 		f->sign1 = 1;
 	}
-	if (tmp > 0) {
-		sign1 *= 1;
-		sign2 *= 1;
+	else {
+		sign1 *= 0;
+		sign2 *= 0;
 		f->sign2 = f->sign1;
 		f->sign1 = 1;
 	}

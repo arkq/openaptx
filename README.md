@@ -62,7 +62,7 @@ libraries (except original Qualcomm libraries) were compiled with Clang version 
 | aptxHD100                              | &mdash;   | &mdash; | 1m21.950s | 0.89616 |
 | [libopenaptx-0.2.0][2]                 | 1m22.090s | 0.89062 | 1m25.730s | 0.85429 |
 
-[1]: ./archive "Archive with Qualcomm apt-X encoding libraries"
+[1]: archive/aarch64 "Archive with Qualcomm apt-X encoding libraries"
 [2]: https://github.com/pali/libopenaptx "The apt-X encoder/decoder based on FFmpeg code"
 
 ## Resources

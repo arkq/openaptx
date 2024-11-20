@@ -67,9 +67,9 @@ static int eval_init(size_t nloops, bool errstop) {
 		aptxhdbtenc_init(&enc_100, endian);
 		aptXHD_init(&enc_new, endian);
 
-		int c, b, ret = 0;
-		for (c = 0; c < APTXHD_CHANNELS; c++)
-			for (b = 0; b < APTXHD_SUBBANDS; b++) {
+		int ret = 0;
+		for (size_t c = 0; c < APTXHD_CHANNELS; c++)
+			for (size_t b = 0; b < APTXHD_SUBBANDS; b++) {
 				for (size_t i = 0; i < param_sizes[b]; i++)
 					ret |= diffint("bit16", enc_new.encoder[c].processor[b].inverter.subband_param_bit16_sl1[i],
 					               enc_100.encoder[c].processor[b].inverter.subband_param_bit16_sl1[i]);

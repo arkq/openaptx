@@ -15,9 +15,8 @@ static size_t aptXHD_search_quant_coeff(uint32_t a, int32_t x, const int32_t * d
 	int64_t aa = (int64_t)a << 32;
 	int64_t xx = x << 8;
 	size_t i = 0;
-	size_t n;
 
-	for (n = size / 2; n > 0; n /= 2)
+	for (size_t n = size / 2; n > 0; n /= 2)
 		if (xx * data[i + n] <= aa)
 			i += n;
 

@@ -16,15 +16,11 @@ static size_t aptX_search_quant_coeff(uint32_t a, int32_t x, const int32_t * dat
 	 * integer space. The search is done using a simple binary search algorithm. */
 
 	int64_t aa = (int64_t)a << 32;
+	int64_t xx = x << 8;
 	size_t i = 0;
-	size_t n;
 
-	for (n = size / 2; n > 0; n /= 2)
-		/* XXX: There might be a potential error during calculation, because it
-		 *      seems that the subtraction is performed as an unsigned operation.
-		 *      Anyway, this algorithm and the original one (from the apt-X lib)
-		 *      have been stress-tested and both return the same values. */
-		if ((int64_t)data[i + n] * (x << 8) - aa <= 0)
+	for (size_t n = size / 2; n > 0; n /= 2)
+		if (xx * data[i + n] <= aa)
 			i += n;
 
 	return i;

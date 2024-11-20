@@ -61,10 +61,11 @@ void aptXHD_QMF_conv_inner(const int32_t s1[16], const int32_t s2[16], int32_t *
 	*out_b = r2;
 }
 
-void aptXHD_QMF_analysis(aptXHD_QMF_analyzer_100 * qmf, const int32_t samples[4], const int32_t refs[4],
-                         int32_t diff[4]) {
+void aptXHD_QMF_analysis(aptXHD_QMF_analyzer_100 * restrict qmf, const int32_t samples[restrict 4],
+                         const int32_t refs[restrict 4], int32_t diff[restrict 4]) {
 
 	int32_t a, b, c, d;
+	int32_t tmp[4];
 
 	qmf->outer[0][qmf->i_outer + 0] = samples[0];
 	qmf->outer[0][qmf->i_outer + 16] = samples[0];
@@ -96,12 +97,12 @@ void aptXHD_QMF_analysis(aptXHD_QMF_analyzer_100 * qmf, const int32_t samples[4]
 
 	qmf->i_inner = (qmf->i_inner + 1) % 16;
 
-	aptXHD_QMF_conv_inner(&qmf->inner[2][qmf->i_inner + 15], &qmf->inner[0][qmf->i_inner], &diff[0], &diff[1]);
+	aptXHD_QMF_conv_inner(&qmf->inner[2][qmf->i_inner + 15], &qmf->inner[0][qmf->i_inner], &tmp[0], &tmp[1]);
 
-	aptXHD_QMF_conv_inner(&qmf->inner[1][qmf->i_inner + 15], &qmf->inner[3][qmf->i_inner], &diff[2], &diff[3]);
+	aptXHD_QMF_conv_inner(&qmf->inner[1][qmf->i_inner + 15], &qmf->inner[3][qmf->i_inner], &tmp[2], &tmp[3]);
 
 	for (size_t i = 0; i < 4; i++)
-		diff[i] -= refs[i];
+		diff[i] = tmp[i] - refs[i];
 	for (size_t i = 0; i < 4; i++)
 		clamp_int24_t(diff[i]);
 }

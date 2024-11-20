@@ -29,10 +29,10 @@ static void aptXHD_quantize_difference(int32_t diff, int32_t dither, int32_t qua
 	int absdiff = abs32(diff);
 	clamp_int24_t(absdiff);
 
-	int64_t v3 = v2 * 16 * (int64_t)(quant * -256);
-	q->unk3 = rshift3((v3 >> 32) + absdiff);
+	int32_t v3 = rshift32((int64_t)(v2 << 4) * (quant * -1 << 8)) + absdiff;
+	q->unk3 = ((v3 + 4) >> 3) - ((uint8_t)(v3 << 5) == 0x80);
 
-	if (absdiff + (v3 >> 32) < 0) {
+	if (q->unk3 < 0) {
 		q->unk2 = q->unk1;
 		q->unk1 = q->unk1 - 1;
 		q->unk3 = -q->unk3;
