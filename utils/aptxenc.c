@@ -53,7 +53,7 @@ void encode(const char * filename) {
 	SF_INFO info = { .format = 0 };
 
 	if (strcmp(filename, "-") == 0) {
-		if ((sf = sf_open_fd(fileno(stdout), SFM_READ, &info, 0)) == NULL) {
+		if ((sf = sf_open_fd(fileno(stdin), SFM_READ, &info, 0)) == NULL) {
 			fprintf(stderr, "Error: Couldn't open audio file: %s\n", sf_strerror(sf));
 			return;
 		}

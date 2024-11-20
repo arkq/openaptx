@@ -1,6 +1,6 @@
 /*
  * [open]aptx - aptx-ffmpeg.c
- * Copyright (c) 2017-2021 Arkadiusz Bokowy
+ * Copyright (c) 2017-2024 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -117,8 +117,7 @@ static int internal_ctx_codec_init(struct internal_ctx * ctx, const AVCodec * co
 
 	ctx->av_ctx->sample_rate = 48000;
 	ctx->av_ctx->sample_fmt = AV_SAMPLE_FMT_S32P;
-	ctx->av_ctx->channel_layout = AV_CH_LAYOUT_STEREO;
-	ctx->av_ctx->channels = av_get_channel_layout_nb_channels(ctx->av_ctx->channel_layout);
+	av_channel_layout_default(&ctx->av_ctx->ch_layout, 2);
 
 	if ((rv = avcodec_open2(ctx->av_ctx, codec, NULL)) != 0) {
 		av_strerror(rv, errmsg, sizeof(errmsg));
@@ -168,7 +167,7 @@ int _aptxenc_init_(APTXENC enc, short endian) {
 
 	ctx->av_frame->nb_samples = 4;
 	ctx->av_frame->format = ctx->av_ctx->sample_fmt;
-	ctx->av_frame->channel_layout = ctx->av_ctx->channel_layout;
+	av_channel_layout_copy(&ctx->av_frame->ch_layout, &ctx->av_ctx->ch_layout);
 
 	if ((rv = av_frame_get_buffer(ctx->av_frame, 0)) != 0) {
 		av_strerror(rv, errmsg, sizeof(errmsg));
@@ -244,7 +243,8 @@ void _aptxdec_destroy_(APTXDEC dec) {
 }
 #endif
 
-static int internal_ctx_encode(struct internal_ctx * ctx, const int32_t pcmL[4], const int32_t pcmR[4]) {
+static int internal_ctx_encode(struct internal_ctx * restrict ctx, const int32_t * restrict pcmL,
+                               const int32_t * restrict pcmR) {
 
 	char errmsg[128];
 	int rv;
@@ -259,10 +259,10 @@ static int internal_ctx_encode(struct internal_ctx * ctx, const int32_t pcmL[4],
 	int32_t * samples_l = (int32_t *)ctx->av_frame->data[0];
 	int32_t * samples_r = (int32_t *)ctx->av_frame->data[1];
 
-	for (size_t i = 0; i < 4; i++) {
+	for (size_t i = 0; i < 4; i++)
 		samples_l[i] = pcmL[i] << APTX_AV_PCM_SAMPLE_SHIFT;
+	for (size_t i = 0; i < 4; i++)
 		samples_r[i] = pcmR[i] << APTX_AV_PCM_SAMPLE_SHIFT;
-	}
 
 	if ((rv = avcodec_send_frame(ctx->av_ctx, ctx->av_frame)) != 0) {
 		av_strerror(rv, errmsg, sizeof(errmsg));
@@ -295,12 +295,14 @@ fail:
 
 #if ENABLE_APTX_ENCODER_API
 #	if APTXHD
-int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint32_t code[2]) {
+int _aptxenc_encode_(APTXENC enc, const int32_t * restrict pcmL, const int32_t * restrict pcmR,
+                     uint32_t * restrict code) {
 #	else
-int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], uint16_t code[2]) {
+int _aptxenc_encode_(APTXENC enc, const int32_t * restrict pcmL, const int32_t * restrict pcmR,
+                     uint16_t * restrict code) {
 #	endif
 
-	struct internal_ctx * ctx = enc;
+	struct internal_ctx * restrict ctx = enc;
 	if (internal_ctx_encode(ctx, pcmL, pcmR) != 0)
 		return -1;
 
@@ -322,7 +324,7 @@ int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4], 
 }
 #endif
 
-static int internal_ctx_decode(struct internal_ctx * ctx, const uint8_t * data, size_t data_size) {
+static int internal_ctx_decode(struct internal_ctx * restrict ctx, const uint8_t * restrict data, size_t data_size) {
 
 	char errmsg[128];
 	int rv;
@@ -342,8 +344,8 @@ static int internal_ctx_decode(struct internal_ctx * ctx, const uint8_t * data, 
 		return -ECOMM;
 	}
 
-	if (ctx->av_frame->channel_layout != AV_CH_LAYOUT_STEREO) {
-		error("Invalid channel layout: %ld != %d", ctx->av_frame->channel_layout, AV_CH_LAYOUT_STEREO);
+	if (ctx->av_frame->ch_layout.nb_channels != 2) {
+		error("Invalid number of channels: %d != %d", ctx->av_frame->ch_layout.nb_channels, 2);
 		return -EMSGSIZE;
 	}
 
@@ -362,12 +364,12 @@ static int internal_ctx_decode(struct internal_ctx * ctx, const uint8_t * data, 
 
 #if ENABLE_APTX_DECODER_API
 #	if APTXHD
-int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint32_t code[2]) {
+int _aptxdec_decode_(APTXDEC dec, int32_t * restrict pcmL, int32_t * restrict pcmR, const uint32_t * restrict code) {
 #	else
-int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16_t code[2]) {
+int _aptxdec_decode_(APTXDEC dec, int32_t * restrict pcmL, int32_t * restrict pcmR, const uint16_t * restrict code) {
 #	endif
 
-	struct internal_ctx * ctx = dec;
+	struct internal_ctx * restrict ctx = dec;
 	const unsigned int shift_hi = ctx->shift_hi;
 	const unsigned int shift_lo = ctx->shift_lo;
 	int rv;
@@ -396,10 +398,10 @@ int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16
 	int32_t * samples_l = (int32_t *)ctx->av_frame->data[0];
 	int32_t * samples_r = (int32_t *)ctx->av_frame->data[1];
 
-	for (size_t i = 0; i < 4; i++) {
+	for (size_t i = 0; i < 4; i++)
 		pcmL[i] = samples_l[i] >> APTX_AV_PCM_SAMPLE_SHIFT;
+	for (size_t i = 0; i < 4; i++)
 		pcmR[i] = samples_r[i] >> APTX_AV_PCM_SAMPLE_SHIFT;
-	}
 
 	return 0;
 }

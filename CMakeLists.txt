@@ -1,5 +1,5 @@
 # [open]aptx - CMakeLists.txt
-# Copyright (c) 2017-2021 Arkadiusz Bokowy
+# Copyright (c) 2017-2024 Arkadiusz Bokowy
 
 cmake_minimum_required(VERSION 3.22)
 project(openaptx
@@ -27,7 +27,8 @@ endif()
 if(WITH_FFMPEG)
 
 	find_package(PkgConfig REQUIRED)
-	pkg_check_modules(FFLibAVCodec REQUIRED IMPORTED_TARGET libavcodec>=58.18.100)
+	pkg_check_modules(FFLibAVCodec REQUIRED IMPORTED_TARGET
+		libavcodec>=59.24.100 libavutil)
 
 	message(WARNING
 		"Building apt-X / apt-X HD with FFmpeg: "

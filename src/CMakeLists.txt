@@ -42,11 +42,11 @@ if(WITH_FFMPEG)
 
 	target_sources(aptx
 		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-ffmpeg.c)
-	target_link_libraries(aptx PkgConfig::FFLibAVCodec)
+	target_link_libraries(aptx PRIVATE PkgConfig::FFLibAVCodec)
 
 	target_sources(aptxHD
 		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-ffmpeg.c)
-	target_link_libraries(aptxHD PkgConfig::FFLibAVCodec)
+	target_link_libraries(aptxHD PRIVATE PkgConfig::FFLibAVCodec)
 
 else()
 
@@ -67,7 +67,7 @@ else()
 
 	if(ENABLE_APTX422)
 		# use reverse-engineered library as an encoding backend
-		target_link_libraries(aptx aptx-4.2.2)
+		target_link_libraries(aptx PRIVATE aptx-4.2.2)
 	endif()
 
 	add_custom_command(
