@@ -5,11 +5,6 @@ add_library(aptx SHARED)
 set_target_properties(aptx PROPERTIES
 	PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/openaptx.h)
 
-add_library(aptxHD SHARED)
-set_target_properties(aptxHD PROPERTIES
-	PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/openaptx.h)
-target_compile_definitions(aptxHD PRIVATE -DAPTXHD=1)
-
 if(ENABLE_APTX422)
 	add_library(aptx-4.2.2 SHARED
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx422/encode.c
@@ -44,10 +39,6 @@ if(WITH_FFMPEG)
 		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-ffmpeg.c)
 	target_link_libraries(aptx PRIVATE PkgConfig::FFLibAVCodec)
 
-	target_sources(aptxHD
-		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-ffmpeg.c)
-	target_link_libraries(aptxHD PRIVATE PkgConfig::FFLibAVCodec)
-
 else()
 
 	add_executable(bin2array
@@ -61,8 +52,14 @@ else()
 		COMMAND bin2array sample_sonar_aptx ${SAMPLE_SONAR_APTX} > sample-sonar.c
 		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/sample-sonar.c)
 
+	add_custom_command(
+		DEPENDS bin2array ${SAMPLE_SONAR_APTX_HD}
+		COMMAND bin2array sample_sonar_aptx_hd ${SAMPLE_SONAR_APTX_HD} > sample-sonar-hd.c
+		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/sample-sonar-hd.c)
+
 	target_sources(aptx PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}/sample-sonar.c
+		${CMAKE_CURRENT_BINARY_DIR}/sample-sonar-hd.c
 		${CMAKE_CURRENT_SOURCE_DIR}/aptx-stub.c)
 
 	if(ENABLE_APTX422)
@@ -70,22 +67,13 @@ else()
 		target_link_libraries(aptx PRIVATE aptx-4.2.2)
 	endif()
 
-	add_custom_command(
-		DEPENDS bin2array ${SAMPLE_SONAR_APTX_HD}
-		COMMAND bin2array sample_sonar_aptx_hd ${SAMPLE_SONAR_APTX_HD} > sample-sonar-hd.c
-		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/sample-sonar-hd.c)
-
-	target_sources(aptxHD PRIVATE
-		${CMAKE_CURRENT_BINARY_DIR}/sample-sonar-hd.c
-		${CMAKE_CURRENT_SOURCE_DIR}/aptx-stub.c)
-
 	if(ENABLE_APTXHD100)
 		# use reverse-engineered library as an encoding backend
-		target_link_libraries(aptxHD PRIVATE aptxHD-1.0.0)
+		target_link_libraries(aptx PRIVATE aptxHD-1.0.0)
 	endif()
 
 endif()
 
-install(TARGETS aptx aptxHD
+install(TARGETS aptx
 	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

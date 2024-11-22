@@ -1,5 +1,5 @@
 # [open]aptx - CMakeLists.txt
-# Copyright (c) 2017-2021 Arkadiusz Bokowy
+# Copyright (c) 2017-2024 Arkadiusz Bokowy
 
 if(ENABLE_APTX_DECODER_API)
 
@@ -8,7 +8,7 @@ if(ENABLE_APTX_DECODER_API)
 
 	add_executable(aptxhddec ${CMAKE_CURRENT_SOURCE_DIR}/aptxdec.c)
 	target_compile_definitions(aptxhddec PRIVATE -DAPTXHD=1)
-	target_link_libraries(aptxhddec aptxHD)
+	target_link_libraries(aptxhddec aptx)
 
 	if(WITH_SNDFILE)
 		target_link_libraries(aptxdec PkgConfig::SNDFile)
@@ -28,7 +28,7 @@ if(ENABLE_APTX_ENCODER_API)
 
 	add_executable(aptxhdenc ${CMAKE_CURRENT_SOURCE_DIR}/aptxenc.c)
 	target_compile_definitions(aptxhdenc PRIVATE -DAPTXHD=1)
-	target_link_libraries(aptxhdenc aptxHD)
+	target_link_libraries(aptxhdenc aptx)
 
 	if(WITH_SNDFILE)
 		target_link_libraries(aptxenc PkgConfig::SNDFile)

@@ -1,6 +1,6 @@
 /*
  * [open]aptx - stub-aptx.c
- * Copyright (c) 2017-2021 Arkadiusz Bokowy
+ * Copyright (c) 2017-2024 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
  *
@@ -15,6 +15,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "openaptx.h"
 
@@ -22,59 +23,14 @@
 extern unsigned char sample_sonar_aptx[], sample_sonar_aptx_hd[];
 extern unsigned int sample_sonar_aptx_len, sample_sonar_aptx_hd_len;
 
-#if APTXHD
-
-#	define APTX_STREAM_DATA_SIZE 6
-
-#	define _aptxenc_new_ NewAptxhdEnc
-#	define _aptxenc_size_ SizeofAptxhdbtenc
-#	define _aptxenc_init_ aptxhdbtenc_init
-#	define _aptxenc_destroy_ aptxhdbtenc_destroy
-#	define _aptxenc_encode_ aptxhdbtenc_encodestereo
-#	define _aptxenc_build_ aptxhdbtenc_build
-#	define _aptxenc_version_ aptxhdbtenc_version
-
-#	define _sample_aptx_sonar_ sample_sonar_aptx_hd
-#	define _sample_aptx_sonar_len_ sample_sonar_aptx_hd_len
-
-#	define _aptxdec_size_ SizeofAptxhdbtdec
-#	define _aptxdec_init_ aptxhdbtdec_init
-#	define _aptxdec_destroy_ aptxhdbtdec_destroy
-#	define _aptxdec_decode_ aptxhdbtdec_decodestereo
-#	define _aptxdec_build_ aptxhdbtdec_build
-#	define _aptxdec_version_ aptxhdbtdec_version
-
-#else
-
-#	define APTX_STREAM_DATA_SIZE 4
-
-#	define _aptxenc_new_ NewAptxEnc
-#	define _aptxenc_size_ SizeofAptxbtenc
-#	define _aptxenc_init_ aptxbtenc_init
-#	define _aptxenc_destroy_ aptxbtenc_destroy
-#	define _aptxenc_encode_ aptxbtenc_encodestereo
-#	define _aptxenc_build_ aptxbtenc_build
-#	define _aptxenc_version_ aptxbtenc_version
-
-#	define _sample_aptx_sonar_ sample_sonar_aptx
-#	define _sample_aptx_sonar_len_ sample_sonar_aptx_len
-
-#	define _aptxdec_size_ SizeofAptxbtdec
-#	define _aptxdec_init_ aptxbtdec_init
-#	define _aptxdec_destroy_ aptxbtdec_destroy
-#	define _aptxdec_decode_ aptxbtdec_decodestereo
-#	define _aptxdec_build_ aptxbtdec_build
-#	define _aptxdec_version_ aptxbtdec_version
-
-#endif
-
 struct internal_ctx {
 	unsigned int counter;
 	short endian;
 };
 
 #if ENABLE_APTX_ENCODER_API
-__attribute__((weak)) int _aptxenc_init_(APTXENC enc, short endian) {
+
+static int aptx_stub_enc_init(APTXENC enc, short endian) {
 
 	static bool banner = true;
 	struct internal_ctx * ctx = enc;
@@ -93,10 +49,114 @@ __attribute__((weak)) int _aptxenc_init_(APTXENC enc, short endian) {
 
 	return 0;
 }
-#endif
+
+static int aptx_stub_encode(struct internal_ctx * ctx, const int32_t pcmL[4], const int32_t pcmR[4],
+                            const unsigned char * stream, size_t stream_len, uint8_t * code, size_t code_len) {
+	(void)pcmL;
+	(void)pcmR;
+
+	if (ctx->counter + code_len > stream_len)
+		ctx->counter = 0;
+
+	memcpy(code, &stream[ctx->counter], code_len);
+	ctx->counter += code_len;
+
+	return 0;
+}
+
+static APTXENC aptx_stub_enc_new(short endian) {
+	static struct internal_ctx ctx;
+	if (aptx_stub_enc_init(&ctx, endian) != 0)
+		return NULL;
+	return &ctx;
+}
+
+OPENAPTX_API_WEAK APTXENC NewAptxEnc(short endian) {
+	return aptx_stub_enc_new(endian);
+}
+
+OPENAPTX_API_WEAK size_t SizeofAptxbtenc(void) {
+	return sizeof(struct internal_ctx);
+}
+
+OPENAPTX_API_WEAK int aptxbtenc_init(APTXENC enc, short endian) {
+	return aptx_stub_enc_init(enc, endian);
+}
+
+OPENAPTX_API_WEAK void aptxbtenc_destroy(APTXENC enc) {
+	(void)enc;
+}
+
+OPENAPTX_API_WEAK int aptxbtenc_encodestereo(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4],
+                                             uint16_t code[2]) {
+
+	uint8_t code_stream[4];
+	aptx_stub_encode(enc, pcmL, pcmR, sample_sonar_aptx, sample_sonar_aptx_len, code_stream, sizeof(code_stream));
+
+	struct internal_ctx * ctx = enc;
+	for (size_t i = 0; i < 2; i++) {
+		uint8_t * c = (uint8_t *)&code[i];
+		c[ctx->endian ? 1 : 0] = code_stream[i * 2 + 1];
+		c[ctx->endian ? 0 : 1] = code_stream[i * 2 + 0];
+	}
+
+	return 0;
+}
+
+OPENAPTX_API_WEAK const char * aptxbtenc_build(void) {
+	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
+}
+
+OPENAPTX_API_WEAK const char * aptxbtenc_version(void) {
+	return PACKAGE_VERSION;
+}
+
+OPENAPTX_API_WEAK APTXENC NewAptxhdEnc(short endian) {
+	return aptx_stub_enc_new(endian);
+}
+
+OPENAPTX_API_WEAK size_t SizeofAptxhdbtenc(void) {
+	return sizeof(struct internal_ctx);
+}
+
+OPENAPTX_API_WEAK int aptxhdbtenc_init(APTXENC enc, short endian) {
+	return aptx_stub_enc_init(enc, endian);
+}
+
+OPENAPTX_API_WEAK void aptxhdbtenc_destroy(APTXENC enc) {
+	(void)enc;
+}
+
+OPENAPTX_API_WEAK int aptxhdbtenc_encodestereo(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4],
+                                               uint32_t code[2]) {
+
+	uint8_t code_stream[6];
+	aptx_stub_encode(enc, pcmL, pcmR, sample_sonar_aptx_hd, sample_sonar_aptx_hd_len, code_stream, sizeof(code_stream));
+
+	for (size_t i = 0; i < 2; i++) {
+		uint8_t * c = (uint8_t *)&code[i];
+		c[0] = code_stream[i * 3 + 2];
+		c[1] = code_stream[i * 3 + 1];
+		c[2] = code_stream[i * 3 + 0];
+		c[3] = 0;
+	}
+
+	return 0;
+}
+
+OPENAPTX_API_WEAK const char * aptxhdbtenc_build(void) {
+	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
+}
+
+OPENAPTX_API_WEAK const char * aptxhdbtenc_version(void) {
+	return PACKAGE_VERSION;
+}
+
+#endif /* ENABLE_APTX_ENCODER_API */
 
 #if ENABLE_APTX_DECODER_API
-__attribute__((weak)) int _aptxdec_init_(APTXDEC dec, short endian) {
+
+static int aptx_stub_dec_init(APTXDEC dec, short endian) {
 
 	static bool banner = true;
 	struct internal_ctx * ctx = dec;
@@ -115,64 +175,10 @@ __attribute__((weak)) int _aptxdec_init_(APTXDEC dec, short endian) {
 
 	return 0;
 }
-#endif
 
-#if ENABLE_APTX_ENCODER_API
-__attribute__((weak)) void _aptxenc_destroy_(APTXENC enc) {
-	(void)enc;
-}
-#endif
-
-#if ENABLE_APTX_DECODER_API
-__attribute__((weak)) void _aptxdec_destroy_(APTXDEC dec) {
-	(void)dec;
-}
-#endif
-
-#if ENABLE_APTX_ENCODER_API
-#	if APTXHD
-__attribute__((weak)) int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4],
-                                           uint32_t code[2]) {
-#	else
-__attribute__((weak)) int _aptxenc_encode_(APTXENC enc, const int32_t pcmL[4], const int32_t pcmR[4],
-                                           uint16_t code[2]) {
-#	endif
-
-	struct internal_ctx * ctx = enc;
+static int aptx_stub_decode(struct internal_ctx * ctx, int32_t pcmL[4], int32_t pcmR[4]) {
 	(void)pcmL;
 	(void)pcmR;
-
-	for (size_t i = 0; i < 2; i++) {
-		uint8_t * p = (uint8_t *)&code[i];
-
-#	if APTXHD
-		p[0] = _sample_aptx_sonar_[ctx->counter + i * 3 + 2];
-		p[1] = _sample_aptx_sonar_[ctx->counter + i * 3 + 1];
-		p[2] = _sample_aptx_sonar_[ctx->counter + i * 3 + 0];
-		p[3] = 0;
-#	else
-		p[ctx->endian ? 1 : 0] = _sample_aptx_sonar_[ctx->counter + i * 2 + 1];
-		p[ctx->endian ? 0 : 1] = _sample_aptx_sonar_[ctx->counter + i * 2 + 0];
-#	endif
-	}
-
-	ctx->counter += APTX_STREAM_DATA_SIZE;
-	if (ctx->counter >= _sample_aptx_sonar_len_)
-		ctx->counter = 0;
-
-	return 0;
-}
-#endif
-
-#if ENABLE_APTX_DECODER_API
-#	if APTXHD
-__attribute__((weak)) int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint32_t code[2]) {
-#	else
-__attribute__((weak)) int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16_t code[2]) {
-#	endif
-	(void)code;
-
-	struct internal_ctx * ctx = dec;
 
 	for (size_t i = 0; i < 4; i++) {
 		pcmL[i] = ++ctx->counter;
@@ -181,49 +187,55 @@ __attribute__((weak)) int _aptxdec_decode_(APTXDEC dec, int32_t pcmL[4], int32_t
 
 	return 0;
 }
-#endif
 
-#if ENABLE_APTX_ENCODER_API
-__attribute__((weak)) const char * _aptxenc_build_(void) {
-	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
-}
-#endif
-
-#if ENABLE_APTX_DECODER_API
-__attribute__((weak)) const char * _aptxdec_build_(void) {
-	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
-}
-#endif
-
-#if ENABLE_APTX_ENCODER_API
-__attribute__((weak)) const char * _aptxenc_version_(void) {
-	return PACKAGE_VERSION;
-}
-#endif
-
-#if ENABLE_APTX_DECODER_API
-__attribute__((weak)) const char * _aptxdec_version_(void) {
-	return PACKAGE_VERSION;
-}
-#endif
-
-#if ENABLE_APTX_ENCODER_API
-__attribute__((weak)) size_t _aptxenc_size_(void) {
+OPENAPTX_API_WEAK size_t SizeofAptxbtdec(void) {
 	return sizeof(struct internal_ctx);
 }
-#endif
 
-#if ENABLE_APTX_DECODER_API
-__attribute__((weak)) size_t _aptxdec_size_(void) {
+OPENAPTX_API_WEAK int aptxbtdec_init(APTXDEC dec, short endian) {
+	return aptx_stub_dec_init(dec, endian);
+}
+
+OPENAPTX_API_WEAK void aptxbtdec_destroy(APTXDEC dec) {
+	(void)dec;
+}
+
+OPENAPTX_API_WEAK int aptxbtdec_decodestereo(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint16_t code[2]) {
+	(void)code;
+	return aptx_stub_decode(dec, pcmL, pcmR);
+}
+
+OPENAPTX_API_WEAK const char * aptxbtdec_build(void) {
+	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
+}
+
+OPENAPTX_API_WEAK const char * aptxbtdec_version(void) {
+	return PACKAGE_VERSION;
+}
+
+OPENAPTX_API_WEAK size_t SizeofAptxhdbtdec(void) {
 	return sizeof(struct internal_ctx);
 }
-#endif
 
-#if ENABLE_APTX_ENCODER_API
-__attribute__((weak)) APTXENC _aptxenc_new_(short endian) {
-	static struct internal_ctx ctx;
-	if (_aptxenc_init_(&ctx, endian) != 0)
-		return NULL;
-	return &ctx;
+OPENAPTX_API_WEAK int aptxhdbtdec_init(APTXDEC dec, short endian) {
+	return aptx_stub_dec_init(dec, endian);
 }
-#endif
+
+OPENAPTX_API_WEAK void aptxhdbtdec_destroy(APTXDEC dec) {
+	(void)dec;
+}
+
+OPENAPTX_API_WEAK int aptxhdbtdec_decodestereo(APTXDEC dec, int32_t pcmL[4], int32_t pcmR[4], const uint32_t code[2]) {
+	(void)code;
+	return aptx_stub_decode(dec, pcmL, pcmR);
+}
+
+OPENAPTX_API_WEAK const char * aptxhdbtdec_build(void) {
+	return PACKAGE_NAME "-stub-" PACKAGE_VERSION;
+}
+
+OPENAPTX_API_WEAK const char * aptxhdbtdec_version(void) {
+	return PACKAGE_VERSION;
+}
+
+#endif /* ENABLE_APTX_DECODER_API */

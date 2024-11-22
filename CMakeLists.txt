@@ -3,9 +3,9 @@
 
 cmake_minimum_required(VERSION 3.22)
 project(openaptx
-	VERSION 1.3.2
+	VERSION 2.0.0
 	DESCRIPTION "Reverse-engineered apt-X audio codec"
-	HOMEPAGE_URL "https://github.com/Arkq/openaptx"
+	HOMEPAGE_URL "https://github.com/arkq/openaptx"
 	LANGUAGES C)
 
 option(ENABLE_DOC "Auto-generate manual files using Doxygen." OFF)
@@ -67,12 +67,7 @@ configure_file(
 	${CMAKE_CURRENT_SOURCE_DIR}/openaptx.pc.in
 	${CMAKE_CURRENT_BINARY_DIR}/openaptx.pc
 	@ONLY)
-configure_file(
-	${CMAKE_CURRENT_SOURCE_DIR}/openaptxhd.pc.in
-	${CMAKE_CURRENT_BINARY_DIR}/openaptxhd.pc
-	@ONLY)
 
 install(FILES
 	${CMAKE_CURRENT_BINARY_DIR}/openaptx.pc
-	${CMAKE_CURRENT_BINARY_DIR}/openaptxhd.pc
 	DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
