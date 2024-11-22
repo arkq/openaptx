@@ -35,9 +35,13 @@ endif()
 
 if(WITH_FFMPEG)
 
-	target_sources(aptx
-		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-ffmpeg.c)
+	target_sources(aptx PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-ffmpeg.c)
 	target_link_libraries(aptx PRIVATE PkgConfig::FFLibAVCodec)
+
+elseif(WITH_FREEAPTX)
+
+	target_sources(aptx PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/aptx-freeaptx.c)
+	target_link_libraries(aptx PRIVATE PkgConfig::FreeAptX)
 
 else()
 

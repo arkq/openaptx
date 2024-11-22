@@ -9,6 +9,9 @@
 /* Define to 1 if FFmpeg is enabled. */
 #cmakedefine WITH_FFMPEG 1
 
+/* Define to 1 if FreeAptX is enabled. */
+#cmakedefine WITH_FREEAPTX 1
+
 /* Define to 1 if SNDFile is enabled. */
 #cmakedefine WITH_SNDFILE 1
 

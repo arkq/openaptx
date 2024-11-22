@@ -14,6 +14,7 @@ option(ENABLE_APTX_ENCODER_API "Build with apt-X encoder API." ON)
 option(ENABLE_APTX422 "Build reverse-engineered library for apt-X encoding." OFF)
 option(ENABLE_APTXHD100 "Build reverse-engineered library for apt-X HD encoding." OFF)
 option(WITH_FFMPEG "Use FFmpeg as a backend for apt-X / apt-X HD libraries." OFF)
+option(WITH_FREEAPTX "Use freeaptx as a backend for apt-X / apt-X HD libraries." OFF)
 option(WITH_SNDFILE "Use sndfile for reading/writign audio files." OFF)
 
 if(ENABLE_APTX_DECODER_API)
@@ -25,18 +26,20 @@ if(ENABLE_APTX_ENCODER_API)
 endif()
 
 if(WITH_FFMPEG)
-
 	find_package(PkgConfig REQUIRED)
 	pkg_check_modules(FFLibAVCodec REQUIRED IMPORTED_TARGET
 		libavcodec>=59.24.100 libavutil)
-
 	message(WARNING
 		"Building apt-X / apt-X HD with FFmpeg: "
 		"Compiling openaptx with FFmpeg as an encoding backend "
 		"requires apt-X Adaptive API support in the client code. "
 		"Otherwise, client will not be able to free resources "
 		"allocated with the aptxbtenc_init() function.")
+endif()
 
+if(WITH_FREEAPTX)
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(FreeAptX REQUIRED IMPORTED_TARGET libfreeaptx)
 endif()
 
 if(WITH_SNDFILE)
