@@ -41,8 +41,8 @@ stub library (build without FFmpeg back-end). See previous paragraph for the mea
 Below is the result of a small benchmark test performed with various apt-X encoding libraries.
 Test was done with the usage of `aptxenc` and `aptxhdenc` tools from this repository.
 Elapsed user time was calculated with the usage of a standard UNIX `time` command line tool. All
-libraries (except original Qualcomm libraries) were compiled with Clang version 8.0.7 with the
-`O2` or `O3` optimization level.
+libraries (except original Qualcomm libraries) were compiled with Clang version 9.0.0 with the
+`O3` optimization level.
 
 ### Setup
 
@@ -52,15 +52,15 @@ libraries (except original Qualcomm libraries) were compiled with Clang version 
 
 ### Results
 
-| Library                                | apt-X     | Mbit/s  | apt-X HD  | Mbit/s  |
-|----------------------------------------|-----------|---------|-----------|---------|
-| [libaptX-1.0.16-rel-Android21][1]      | 1m00.370s | 1.23673 | &mdash;   | &mdash; |
-| [libaptXHD-1.0.1-rel-Android21][1]     | &mdash;   | &mdash; | 1m07.030s | 1.11109 |
-| openaptx-stub                          | 0m04.480s |     0.0 | 0m04.820s |     0.0 |
-| openaptx-ffmpeg (libavcodec-58.54.100) | 1m58.100s | 0.60835 | 2m03.270s | 0.58354 |
-| aptx422                                | 1m19.840s | 0.91721 | &mdash;   | &mdash; |
-| aptxHD100                              | &mdash;   | &mdash; | 1m21.950s | 0.89616 |
-| [libopenaptx-0.2.0][2]                 | 1m22.090s | 0.89062 | 1m25.730s | 0.85429 |
+| Library                                | apt-X   | Mbit/s  | apt-X HD | Mbit/s  |
+|----------------------------------------|---------|---------|----------|---------|
+| [libaptX-1.0.16-rel-Android21][1]      |   1m01s |    23.8 | &mdash;  | &mdash; |
+| [libaptXHD-1.0.1-rel-Android21][1]     | &mdash; | &mdash; |    1m04s |    22.7 |
+| openaptx-stub                          |   0m11s |     0.0 |    0m11s |     0.0 |
+| openaptx-ffmpeg (libavcodec-59.37.100) |   2m12s |    11.0 |    2m18s |    10.5 |
+| aptx422                                |   1m14s |    19.6 | &mdash;  | &mdash; |
+| aptxHD100                              | &mdash; | &mdash; |    1m16s |    19.1 |
+| [libopenaptx-0.2.0][2]                 |   1m17s |    18.8 |    1m19s |    18.4 |
 
 [1]: archive/aarch64 "Archive with Qualcomm apt-X encoding libraries"
 [2]: https://github.com/pali/libopenaptx "The apt-X encoder/decoder based on FFmpeg code"

@@ -1,5 +1,5 @@
 /*
- * [open]aptx - stub-aptx.c
+ * [open]aptx - aptx-stub.c
  * Copyright (c) 2017-2024 Arkadiusz Bokowy
  *
  * This file is a part of [open]aptx.
