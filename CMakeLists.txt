@@ -39,12 +39,14 @@ endif()
 
 if(WITH_FREEAPTX)
 	find_package(PkgConfig REQUIRED)
-	pkg_check_modules(FreeAptX REQUIRED IMPORTED_TARGET libfreeaptx)
+	pkg_check_modules(FreeAptX REQUIRED IMPORTED_TARGET
+		libfreeaptx>=0.1.0)
 endif()
 
 if(WITH_SNDFILE)
 	find_package(PkgConfig REQUIRED)
-	pkg_check_modules(SNDFile REQUIRED IMPORTED_TARGET sndfile)
+	pkg_check_modules(SNDFile REQUIRED IMPORTED_TARGET
+		sndfile>=1.0.19)
 endif()
 
 configure_file(

@@ -17,6 +17,19 @@ cmake -DENABLE_DOC=ON -DWITH_FFMPEG=ON -DWITH_SNDFILE=ON ..
 make && make install
 ```
 
+### Prerequisites
+
+- CMake 3.22 or newer
+- [Doxygen](https://doxygen.nl/index.html) (optional)
+- [FFmpeg](https://ffmpeg.org/) 5.1.0 or newer (optional)
+- [libfreeaptx](https://github.com/iamthehorker/libfreeaptx) 0.1.0 or newer (optional)
+- [libsndfile](https://libsndfile.github.io/libsndfile/) 1.0.19 or newer (optional)
+
+```sh
+# Install required packages on Debian-based systems
+sudo apt-get install cmake doxygen ffmpeg libfreeaptx-dev libsndfile1-dev
+```
+
 ### Configure options
 
 - `ENABLE_DOC` - build and install manual files (requires Doxygen)
@@ -25,6 +38,7 @@ make && make install
 - `ENABLE_APTX422` - build reverse engineered apt-X library based on `bt-aptX-x86-4.2.2.so`
 - `ENABLE_APTXHD100` - build reverse engineered apt-X HD library based on `aptXHD-1.0.0-ARMv7A`
 - `WITH_FFMPEG` - use FFmpeg as a back-end (otherwise, stub library will be built)
+- `WITH_FREEAPTX` - use libfreeaptx as a back-end (FFmpeg back-end must be disabled)
 - `WITH_SNDFILE` - read file formats supported by libsndfile (used by openaptx utils)
 
 In the apt-X stub library (build without FFmpeg back-end), all symbols are exported as
