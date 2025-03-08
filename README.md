@@ -22,7 +22,7 @@ make && make install
 - CMake 3.22 or newer
 - [Doxygen](https://doxygen.nl/index.html) (optional)
 - [FFmpeg](https://ffmpeg.org/) 5.1.0 or newer (optional)
-- [libfreeaptx](https://github.com/iamthehorker/libfreeaptx) 0.1.0 or newer (optional)
+- [libfreeaptx](https://github.com/regularhunter/libfreeaptx) 0.1.0 or newer (optional)
 - [libsndfile](https://libsndfile.github.io/libsndfile/) 1.0.19 or newer (optional)
 
 ```sh
