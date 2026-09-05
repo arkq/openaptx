@@ -1,6 +1,11 @@
 # [open]aptx - CMakeLists.txt
 # Copyright (c) 2017-2021 Arkadiusz Bokowy
 
+add_executable(aptxadaptive-test aptx-adaptive-stream.c)
+target_compile_features(aptxadaptive-test PRIVATE c_std_11)
+target_link_libraries(aptxadaptive-test PRIVATE aptx)
+add_test(NAME aptxadaptive-stream COMMAND aptxadaptive-test)
+
 if(ENABLE_APTX422)
 
 	add_library(qualcomm_libaptx SHARED IMPORTED)
