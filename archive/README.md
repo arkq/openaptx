@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2024-2026 [open]aptx developers
+SPDX-License-Identifier: MIT
+-->
+
 # Archive
 
 Libraries stored in this directory are not used in the project. They are here

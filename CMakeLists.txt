@@ -1,5 +1,6 @@
 # [open]aptx - CMakeLists.txt
-# Copyright (c) 2017-2024 Arkadiusz Bokowy
+# SPDX-FileCopyrightText: 2017-2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
 
 cmake_minimum_required(VERSION 3.22)
 project(openaptx
@@ -15,7 +16,7 @@ option(ENABLE_APTX422 "Build reverse-engineered library for apt-X encoding." OFF
 option(ENABLE_APTXHD100 "Build reverse-engineered library for apt-X HD encoding." OFF)
 option(WITH_FFMPEG "Use FFmpeg as a backend for apt-X / apt-X HD libraries." OFF)
 option(WITH_FREEAPTX "Use freeaptx as a backend for apt-X / apt-X HD libraries." OFF)
-option(WITH_SNDFILE "Use sndfile for reading/writign audio files." OFF)
+option(WITH_SNDFILE "Use sndfile for reading/writing audio files." OFF)
 
 if(ENABLE_APTX_DECODER_API)
 	set(HAVE_APTX_DECODER "true")
@@ -64,6 +65,7 @@ include(GNUInstallDirs)
 if(ENABLE_DOC)
 	add_subdirectory(doc)
 endif()
+
 add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(utils)

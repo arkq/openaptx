@@ -1,0 +1,8 @@
+Qualcomm Proprietary License
+
+SPDX-FileCopyrightText: Qualcomm Technologies, Inc. and/or its subsidiaries.
+All rights reserved.
+
+This software is proprietary and confidential. Any unauthorized use,
+reproduction, modification, or redistribution of this binary file is
+strictly prohibited without prior written permission from Qualcomm.

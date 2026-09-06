@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2024-2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
 ---
 BasedOnStyle: LLVM
 ColumnLimit: 120

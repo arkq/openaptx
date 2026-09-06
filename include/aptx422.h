@@ -1,11 +1,7 @@
 /*
  * [open]aptx - aptx422.h
- * Copyright (c) 2017 Arkadiusz Bokowy
- *
- * This file is a part of [open]aptx.
- *
- * This project is licensed under the terms of the MIT license.
- *
+ * SPDX-FileCopyrightText: 2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef OPENAPTX_APTX422_H_

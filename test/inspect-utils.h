@@ -1,11 +1,7 @@
 /*
  * inspect-utils.h
- * Copyright (c) 2017-2018 Arkadiusz Bokowy
- *
- * This file is a part of [open]aptx.
- *
- * This project is licensed under the terms of the MIT license.
- *
+ * SPDX-FileCopyrightText: 2017-2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef OPENAPTX_INSPECTUTILS_H_

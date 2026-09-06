@@ -1,5 +1,6 @@
 # [open]aptx - CMakeLists.txt
-# Copyright (c) 2017-2021 Arkadiusz Bokowy
+# SPDX-FileCopyrightText: 2017-2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
 
 include(FindDoxygen)
 

@@ -1,4 +1,8 @@
-/* config.h - Generated from config.h.in by CMake */
+/*
+ * config.h - Generated from config.h.in by CMake
+ * SPDX-FileCopyrightText: 2024-2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
+ */
 
 /* Define to 1 if apt-X decoder API is enabled. */
 #cmakedefine ENABLE_APTX_DECODER_API 1
