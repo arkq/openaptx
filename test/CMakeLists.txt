@@ -6,6 +6,11 @@ target_compile_features(aptxadaptive-test PRIVATE c_std_11)
 target_link_libraries(aptxadaptive-test PRIVATE aptx)
 add_test(NAME aptxadaptive-stream COMMAND aptxadaptive-test)
 
+add_executable(aptx-lifecycle-test aptx-lifecycle.c)
+target_compile_features(aptx-lifecycle-test PRIVATE c_std_11)
+target_link_libraries(aptx-lifecycle-test PRIVATE aptx)
+add_test(NAME aptx-lifecycle COMMAND aptx-lifecycle-test)
+
 if(ENABLE_APTX422)
 
 	add_library(qualcomm_libaptx SHARED IMPORTED)
