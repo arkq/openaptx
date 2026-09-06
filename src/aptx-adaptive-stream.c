@@ -64,6 +64,9 @@ int aptx_adaptive_parse_ota_header(const uint8_t data[APTX_ADAPTIVE_OTA_HEADER_S
 	case 0xad:
 		version = APTX_ADAPTIVE_OTA_R3;
 		break;
+	case 0xaf:
+		version = APTX_ADAPTIVE_OTA_R2_2;
+		break;
 	default:
 		return -EINVAL;
 	}

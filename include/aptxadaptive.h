@@ -24,14 +24,28 @@ extern "C" {
 
 /* The following small protocol is used only by the research helper under
  * research/aptx-adaptive-qemu.  It deliberately carries no Qualcomm code or
- * binary data; it only describes how the host-side PipeWire bridge asks the
- * user-supplied Hexagon adapter to select a codec revision and bitrate. */
+ * binary data; it describes how the host-side PipeWire bridge asks the
+ * user-supplied Hexagon adapter to select a codec revision, sample format,
+ * Lossless policy, and link-quality level. */
 #define APTX_ADAPTIVE_HELPER_CONTROL UINT32_MAX
-#define APTX_ADAPTIVE_HELPER_PROTOCOL_VERSION 1u
+#define APTX_ADAPTIVE_HELPER_PROTOCOL_VERSION 2u
 #define APTX_ADAPTIVE_HELPER_COMMAND_CONFIG 1u
 #define APTX_ADAPTIVE_HELPER_COMMAND_SET_BITRATE 2u
+#define APTX_ADAPTIVE_HELPER_COMMAND_SET_QUALITY_LEVEL 3u
 #define APTX_ADAPTIVE_HELPER_CIE_SIZE 40u
 #define APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE 11u
+
+/* These modes control whether the helper is allowed to provide the
+ * Qualcomm-specific feedback which is needed before the 2.2 Lossless state
+ * can be selected.  AUTO is deliberately conservative: it requires the host
+ * to assert that its Bluetooth controller provides QHS.  FORCE is intended
+ * for controlled experiments with a QHS-capable controller and must not be
+ * confused with a way to add QHS to an ordinary Bluetooth adapter. */
+enum aptx_adaptive_helper_lossless_mode {
+	APTX_ADAPTIVE_HELPER_LOSSLESS_OFF = 0,
+	APTX_ADAPTIVE_HELPER_LOSSLESS_AUTO = 1,
+	APTX_ADAPTIVE_HELPER_LOSSLESS_FORCE = 2,
+};
 
 enum aptx_adaptive_helper_mode {
 	APTX_ADAPTIVE_HELPER_MODE_AUTO = 0,
@@ -51,6 +65,9 @@ struct aptx_adaptive_helper_config {
 	uint32_t profile;
 	uint32_t mtu;
 	uint32_t abr_enabled;
+	uint32_t bits_per_sample;
+	uint32_t lossless_mode;
+	uint32_t qhs_supported;
 	uint32_t cie_size;
 	uint8_t cie[APTX_ADAPTIVE_HELPER_CIE_SIZE];
 	uint8_t r2_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE];
@@ -59,6 +76,7 @@ struct aptx_adaptive_helper_config {
 enum aptx_adaptive_ota_version {
 	APTX_ADAPTIVE_OTA_R2 = 2,
 	APTX_ADAPTIVE_OTA_R3 = 3,
+	APTX_ADAPTIVE_OTA_R2_2 = 22,
 };
 
 /** Parsed fields from one Adaptive OTA transport header. */
@@ -77,7 +95,7 @@ struct aptx_adaptive_ota_header {
 	size_t payload_size;
 	/** Decoder channel-mode ID associated with channel_mode. */
 	uint8_t decoder_channel_mode;
-	/** Encoder revision marker: R2 (0xae) or R3 (0xad). */
+	/** Encoder revision marker: R2 (0xae), R3 (0xad), or R2.2 (0xaf). */
 	enum aptx_adaptive_ota_version version;
 };
 

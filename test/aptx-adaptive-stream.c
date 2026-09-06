@@ -56,6 +56,24 @@ int main(void) {
 	assert(header.session_id == 0xad000000);
 	assert(consumed == sizeof(r3_stream));
 
+	r3_stream[7] = 0xaf;
+	assert(aptx_adaptive_next_ota_packet(r3_stream, sizeof(r3_stream),
+			&header, &payload, &consumed) == 0);
+	assert(header.version == APTX_ADAPTIVE_OTA_R2_2);
+	assert(header.session_id == 0xaf000000);
+	assert(consumed == sizeof(r3_stream));
+
+	uint8_t lossless_stream[APTX_ADAPTIVE_OTA_HEADER_SIZE + 760] = { 0 };
+	lossless_stream[3] = 5;
+	lossless_stream[4] = 0xa0;
+	lossless_stream[7] = 0xaf;
+	assert(aptx_adaptive_next_ota_packet(lossless_stream,
+			sizeof(lossless_stream), &header, &payload, &consumed) == 0);
+	assert(header.version == APTX_ADAPTIVE_OTA_R2_2);
+	assert(header.packet_type == 5);
+	assert(header.payload_size == 760);
+	assert(consumed == sizeof(lossless_stream));
+
 	const uint16_t expected_payload_sizes[] = {
 		348, 656, 140, 152, 560, 760, 960, 348, 980,
 	};
