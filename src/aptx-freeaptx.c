@@ -48,7 +48,7 @@ static int aptx_freeaptx_init(struct internal_ctx * ctx, int codec_id, short end
 }
 
 static void aptx_freeaptx_destroy(struct internal_ctx * ctx) {
-	if (ctx != NULL)
+	if (ctx == NULL)
 		return;
 	aptx_finish(ctx->ctx);
 }
