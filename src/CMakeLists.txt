@@ -3,7 +3,9 @@
 
 add_library(aptx SHARED)
 set_target_properties(aptx PROPERTIES
-	PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../include/openaptx.h)
+	PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/../include/openaptx.h;${CMAKE_CURRENT_SOURCE_DIR}/../include/aptxadaptive.h")
+
+target_sources(aptx PRIVATE aptx-adaptive-stream.c)
 
 if(ENABLE_APTX422)
 	add_library(aptx-4.2.2 SHARED
