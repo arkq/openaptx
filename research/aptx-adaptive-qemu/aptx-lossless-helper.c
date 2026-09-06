@@ -7,7 +7,8 @@
  *
  * Protocol:
  *   startup reply: u32le status, u32le payload_size (both zero)
- *   audio request: u32le pcm_bytes, followed by interleaved S32 PCM
+ *   audio request: u32le pcm_bytes, followed by interleaved S32/Q27 PCM;
+ *                  the original source word size is carried in the config
  *   audio reply:   u32le status, u32le packet_bytes, followed by one packet
  *   control request: 0xffffffff, u32le command, u32le payload_bytes,
  *                    followed by the command payload
@@ -31,6 +32,27 @@
 #define MAX_PACKET_SIZE 4096u
 #define DEFAULT_PROFILE 6
 
+/* Qualcomm AudioReach parameter IDs used by the extracted 2.2 CAPI wrapper.
+ * The IDs and payload layouts are public AudioReach interfaces; the helper
+ * only forwards them to the user-supplied module. */
+#define PARAM_ID_APTX_ADAPTIVE_ENC_INIT 0x08001183u
+#define PARAM_ID_IMCL_INCOMING_DATA 0x0a001019u
+#define IMCL_PARAM_ID_BT_BITRATE_LEVEL 0x0800115cu
+#define IMCL_PARAM_ID_BT_SIDEBAND 0x0800116du
+#define AFE_ENCODER_PARAM_ID_BIT_RATE_LEVEL_MAP 0x000132e1u
+
+#define APTX_ADAPTIVE_MAX_ABR_LEVELS 5u
+#define APTX_ADAPTIVE_PROFILE_HIGH_QUALITY 0x1000u
+#define R2_2_LOSSLESS_OBSERVED_PACKET_SIZE 768u
+
+/* Sideband IDs in the public Qualcomm Bluetooth encoder-feedback API.  The
+ * CPH2749 2.2 blob additionally interprets sideband 14 as a nested payload;
+ * nested IDs 2 and 3 carry the observed QHS and source-16-bit flags. */
+#define SIDEBAND_ID_WIFI_ACTIVITY 8u
+#define SIDEBAND_ID_NESTED 14u
+#define SIDEBAND_NESTED_ID_QHS 2u
+#define SIDEBAND_NESTED_ID_SOURCE_16BIT 3u
+
 /* The R3 wrapper uses an internal two-channel ring.  A normal AudioReach
  * container advances these cursors after handing the output to its next
  * module; this standalone helper has no such container. */
@@ -44,7 +66,7 @@
 #define R3_METADATA_HANDLER_SHADOW 0x4388u
 #define R3_METADATA_HANDLER_SHADOW_SIZE 0x1cu
 
-_Static_assert(sizeof(struct aptx_adaptive_helper_config) == 83,
+_Static_assert(sizeof(struct aptx_adaptive_helper_config) == 95,
 		"unexpected helper configuration layout");
 
 extern capi_err_t capi_aptx_adaptive_enc_init(capi_t *module,
@@ -60,8 +82,57 @@ typedef int (*set_profile_fn)(void *encoder, int profile, int force);
 struct media_format_storage {
 	capi_set_get_media_format_t header;
 	capi_standard_data_format_v2_t format;
-	capi_channel_type_t channel_type[2];
+	/* The CPH2749 module was built with the full V2 channel-type tail and
+	 * rejects shorter payloads even for a stereo stream. */
+	capi_channel_type_t channel_type[CAPI_MAX_CHANNELS_V2];
 };
+
+_Static_assert(sizeof(struct media_format_storage) == 100,
+		"unexpected CAPI V2 media format layout");
+
+struct aptx_adaptive_capi_init {
+	uint32_t sampling_rate;
+	uint32_t mtu;
+	uint32_t channel_mode;
+	uint32_t min_sink_buffer[3];
+	uint32_t max_sink_buffer[3];
+	uint32_t profile;
+	uint32_t twsplus_dual_mono_mode;
+	uint32_t twsplus_fade_duration;
+	uint8_t config_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE];
+} __attribute__((packed));
+
+struct aptx_adaptive_bitrate_map_entry {
+	uint32_t link_quality_level;
+	uint32_t bitrate;
+} __attribute__((packed));
+
+struct aptx_adaptive_bitrate_map {
+	uint32_t num_levels;
+	struct aptx_adaptive_bitrate_map_entry levels[APTX_ADAPTIVE_MAX_ABR_LEVELS];
+} __attribute__((packed));
+
+struct aptx_adaptive_imcl_header {
+	uint32_t port_id;
+	uint32_t reserved;
+	uint32_t param_id;
+	uint32_t actual_data_len;
+} __attribute__((packed));
+
+struct aptx_adaptive_sideband {
+	uint8_t sideband_id;
+	uint8_t sideband_length;
+	uint8_t sideband_data[256];
+} __attribute__((packed));
+
+_Static_assert(sizeof(struct aptx_adaptive_capi_init) == 59,
+		"unexpected Qualcomm Adaptive init payload layout");
+_Static_assert(sizeof(struct aptx_adaptive_bitrate_map) == 44,
+		"unexpected AudioReach bitrate map layout");
+_Static_assert(sizeof(struct aptx_adaptive_imcl_header) == 16,
+		"unexpected IMCL incoming header layout");
+_Static_assert(sizeof(struct aptx_adaptive_sideband) == 258,
+		"unexpected Bluetooth sideband layout");
 
 struct helper_config {
 	uint32_t source_rate;
@@ -70,6 +141,9 @@ struct helper_config {
 	uint32_t profile;
 	uint32_t mtu;
 	uint32_t abr_enabled;
+	uint32_t bits_per_sample;
+	enum aptx_adaptive_helper_lossless_mode lossless_mode;
+	bool qhs_supported;
 	uint8_t cie[APTX_ADAPTIVE_HELPER_CIE_SIZE];
 	uint8_t r2_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE];
 };
@@ -84,6 +158,11 @@ struct helper_state {
 	uint32_t profile;
 	uint32_t mtu;
 	bool abr_enabled;
+	uint32_t bits_per_sample;
+	enum aptx_adaptive_helper_lossless_mode lossless_mode;
+	bool qhs_supported;
+	bool lossless_eligible;
+	uint8_t r2_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE];
 
 	void *codec_library2;
 	void *codec_library3;
@@ -302,10 +381,18 @@ static int configure_from_wire(const uint8_t *data, size_t size,
 	config->profile = read_u32le(data + 16);
 	config->mtu = read_u32le(data + 20);
 	config->abr_enabled = read_u32le(data + 24);
-	if (read_u32le(data + 28) != APTX_ADAPTIVE_HELPER_CIE_SIZE)
+	config->bits_per_sample = read_u32le(data + 28);
+	config->lossless_mode =
+		(enum aptx_adaptive_helper_lossless_mode)read_u32le(data + 32);
+	config->qhs_supported = read_u32le(data + 36) != 0;
+	if (read_u32le(data + 40) != APTX_ADAPTIVE_HELPER_CIE_SIZE)
 		return -EINVAL;
-	memcpy(config->cie, data + 32, sizeof(config->cie));
-	memcpy(config->r2_stream, data + 32 + sizeof(config->cie),
+	if (config->bits_per_sample != 16 && config->bits_per_sample != 32)
+		return -EINVAL;
+	if (config->lossless_mode > APTX_ADAPTIVE_HELPER_LOSSLESS_FORCE)
+		return -EINVAL;
+	memcpy(config->cie, data + 44, sizeof(config->cie));
+	memcpy(config->r2_stream, data + 44 + sizeof(config->cie),
 			sizeof(config->r2_stream));
 	return 0;
 }
@@ -349,6 +436,8 @@ static void prepare_init_properties(struct helper_state *state,
 	state->media_format.format.minor_version = CAPI_MEDIA_FORMAT_MINOR_VERSION;
 	state->media_format.format.bitstream_format = MEDIA_FMT_ID_PCM;
 	state->media_format.format.num_channels = 2;
+	/* This Qualcomm module accepts a 32-bit Q27 CAPI stream.  The original
+	 * source word size is conveyed separately by the Bluetooth sideband. */
 	state->media_format.format.bits_per_sample = 32;
 	state->media_format.format.q_factor = 27;
 	state->media_format.format.sampling_rate = encoder_rate;
@@ -368,11 +457,17 @@ static void prepare_init_properties(struct helper_state *state,
 	state->init_properties[1].id = CAPI_INPUT_MEDIA_FORMAT_V2;
 	state->init_properties[1].payload.data_ptr =
 			(int8_t *)&state->media_format;
+	uint32_t media_format_size = state->mode == APTX_ADAPTIVE_HELPER_MODE_R3 ?
+			(sizeof(state->media_format.header) +
+			 sizeof(state->media_format.format) +
+			 2u * sizeof(state->media_format.channel_type[0])) :
+			sizeof(state->media_format);
 	state->init_properties[1].payload.actual_data_len =
-		sizeof(state->media_format);
+		media_format_size;
 	state->init_properties[1].payload.max_data_len =
-		sizeof(state->media_format);
+		media_format_size;
 	state->init_properties[1].port_info.is_valid = 1;
+	state->init_properties[1].port_info.is_input_port = 1;
 	state->init_properties[1].port_info.port_index = 0;
 	state->init.props_num = 2;
 	state->init.prop_ptr = state->init_properties;
@@ -398,13 +493,175 @@ static int install_metadata_handler(struct helper_state *state)
 			&metadata_param) != CAPI_EOK)
 		return -EIO;
 
-	if (state->mode == APTX_ADAPTIVE_HELPER_MODE_R3) {
+	/* The R2.2 wrapper may replace its encoder vtable with the R3 kernel after
+	 * receiving PARAM_ID_APTX_ADAPTIVE_ENC_INIT.  Keep the framework callback
+	 * in the shadow area used by that kernel in either case. */
+	if (*(uint8_t *)(state->module_memory + 0x24d) == 3) {
 		for (size_t i = 0;
 			i < R3_METADATA_HANDLER_SHADOW_SIZE / sizeof(uint32_t); ++i)
 			((uint32_t *)(state->module_memory +
 					R3_METADATA_HANDLER_SHADOW))[i] =
 				((const uint32_t *)&state->metadata_handler)[i];
 	}
+	return 0;
+}
+
+static int capi_set_param(struct helper_state *state, uint32_t param_id,
+		void *data, size_t size)
+{
+	if (state->module == NULL || state->module->vtbl_ptr == NULL ||
+			data == NULL || size > UINT32_MAX)
+		return -EINVAL;
+
+	capi_buf_t payload = {
+		.data_ptr = (int8_t *)data,
+		.actual_data_len = (uint32_t)size,
+		.max_data_len = (uint32_t)size,
+	};
+	return state->module->vtbl_ptr->set_param(state->module, param_id,
+			NULL, &payload) == CAPI_EOK ? 0 : -EIO;
+}
+
+static uint32_t capi_rate_selector(uint32_t rate)
+{
+	switch (rate) {
+	case 44100:
+		return 2;
+	case 48000:
+		return 1;
+	case 96000:
+		return 0;
+	default:
+		return UINT32_MAX;
+	}
+}
+
+static int configure_r2_capi(struct helper_state *state)
+{
+	struct aptx_adaptive_capi_init config __attribute__((aligned(4))) = { 0 };
+	uint32_t rate_selector = capi_rate_selector(state->encoder_rate);
+
+	if (rate_selector == UINT32_MAX)
+		return -EINVAL;
+
+	/* This is the payload consumed by the Qualcomm 2.2 wrapper, not the
+	 * ordinary 40-byte A2DP capability record.  The wrapper expects the MTU
+	 * including its eight-byte transport header. */
+	config.sampling_rate = rate_selector;
+	config.mtu = state->mtu > UINT32_MAX - 8 ? UINT32_MAX : state->mtu + 8;
+	config.channel_mode = 2; /* stereo */
+	for (size_t i = 0; i < 3; ++i) {
+		config.min_sink_buffer[i] = 20;
+		config.max_sink_buffer[i] = 50;
+	}
+	config.profile = APTX_ADAPTIVE_PROFILE_HIGH_QUALITY;
+	config.twsplus_dual_mono_mode = 0;
+	config.twsplus_fade_duration = 255;
+	memcpy(config.config_stream, state->r2_stream,
+			sizeof(config.config_stream));
+
+	return capi_set_param(state, PARAM_ID_APTX_ADAPTIVE_ENC_INIT,
+			&config, sizeof(config));
+}
+
+static int configure_bitrate_map(struct helper_state *state)
+{
+	static const uint32_t bitrates[APTX_ADAPTIVE_MAX_ABR_LEVELS] = {
+		279000, 320000, 352000, 384000, 420000,
+	};
+	struct aptx_adaptive_bitrate_map map __attribute__((aligned(4))) = {
+		.num_levels = APTX_ADAPTIVE_MAX_ABR_LEVELS,
+	};
+
+	for (size_t i = 0; i < APTX_ADAPTIVE_MAX_ABR_LEVELS; ++i) {
+		map.levels[i].link_quality_level = (uint32_t)i + 1;
+		map.levels[i].bitrate = bitrates[i];
+	}
+	return capi_set_param(state, AFE_ENCODER_PARAM_ID_BIT_RATE_LEVEL_MAP,
+			&map, sizeof(map));
+}
+
+static int send_imcl_quality_level(struct helper_state *state,
+		uint32_t quality_level)
+{
+	struct {
+		struct aptx_adaptive_imcl_header header;
+		uint32_t value;
+	} __attribute__((packed)) request __attribute__((aligned(4))) = {
+		.header = {
+			.param_id = IMCL_PARAM_ID_BT_BITRATE_LEVEL,
+			.actual_data_len = sizeof(request.value),
+		},
+		.value = quality_level,
+	};
+
+	return capi_set_param(state, PARAM_ID_IMCL_INCOMING_DATA,
+			&request, sizeof(request));
+}
+
+static int send_imcl_sideband(struct helper_state *state, uint32_t sideband_id,
+		const uint8_t *data, size_t data_size)
+{
+	struct {
+		struct aptx_adaptive_imcl_header header;
+		struct aptx_adaptive_sideband sideband;
+	} __attribute__((packed)) request __attribute__((aligned(4))) = {
+		.header = {
+			.param_id = IMCL_PARAM_ID_BT_SIDEBAND,
+			/* The v1 sideband payload is a fixed 258-byte structure. */
+			.actual_data_len = sizeof(request.sideband),
+		},
+		.sideband = {
+			.sideband_id = (uint8_t)sideband_id,
+		},
+	};
+
+	if (data == NULL || data_size > sizeof(request.sideband.sideband_data))
+		return -EINVAL;
+	request.sideband.sideband_length = (uint8_t)data_size;
+	memcpy(request.sideband.sideband_data, data, data_size);
+	return capi_set_param(state, PARAM_ID_IMCL_INCOMING_DATA,
+			&request, sizeof(request));
+}
+
+static int configure_lossless_feedback(struct helper_state *state)
+{
+	static const uint8_t qhs_feedback[] = {
+		SIDEBAND_NESTED_ID_QHS, 1,
+	};
+	static const uint8_t source_16bit_feedback[] = {
+		SIDEBAND_NESTED_ID_SOURCE_16BIT, 1,
+	};
+	const bool sink_supports_r22 =
+		(state->r2_stream[1] & 0x82u) == 0x82u;
+
+	state->lossless_eligible = state->mode == APTX_ADAPTIVE_HELPER_MODE_R2 &&
+			state->encoder_rate == 44100 && state->bits_per_sample == 16 &&
+			sink_supports_r22 &&
+			state->mtu >= R2_2_LOSSLESS_OBSERVED_PACKET_SIZE &&
+			state->lossless_mode != APTX_ADAPTIVE_HELPER_LOSSLESS_OFF;
+	if (!state->lossless_eligible)
+		return 0;
+
+	/* The source word-size indication is useful even when QHS is unavailable;
+	 * it describes the S16 stream without asking the module to enter its
+	 * Lossless state. */
+	if (send_imcl_sideband(state, SIDEBAND_ID_NESTED,
+			source_16bit_feedback, sizeof(source_16bit_feedback)) < 0)
+		return -EIO;
+	if (state->lossless_mode == APTX_ADAPTIVE_HELPER_LOSSLESS_AUTO &&
+			!state->qhs_supported)
+		return 0;
+
+	/* These are the exact v1 feedback paths used by the 2.2 module.  The
+	 * force mode is intentionally explicit because a normal Intel controller
+	 * cannot supply Qualcomm High Speed Link/QHS status. */
+	if (send_imcl_sideband(state, SIDEBAND_ID_WIFI_ACTIVITY,
+			(const uint8_t[]){ 0 }, 1) < 0)
+		return -EIO;
+	if (send_imcl_sideband(state, SIDEBAND_ID_NESTED,
+			qhs_feedback, sizeof(qhs_feedback)) < 0)
+		return -EIO;
 	return 0;
 }
 
@@ -439,6 +696,11 @@ static int initialize_mode(struct helper_state *state,
 	state->profile = config->profile == 0 ? DEFAULT_PROFILE : config->profile;
 	state->mtu = config->mtu == 0 ? 995 : config->mtu;
 	state->abr_enabled = config->abr_enabled != 0;
+	state->bits_per_sample = config->bits_per_sample;
+	state->lossless_mode = config->lossless_mode;
+	state->qhs_supported = config->qhs_supported;
+	memcpy(state->r2_stream, config->r2_stream, sizeof(state->r2_stream));
+	state->lossless_eligible = false;
 	reset_module_storage(state);
 	prepare_init_properties(state, state->encoder_rate);
 
@@ -473,10 +735,26 @@ static int initialize_mode(struct helper_state *state,
 		if (state->right_encoder != NULL &&
 				state->set_profile(state->right_encoder, (int)state->profile, 0) != 0)
 			return -EIO;
-	} else if (set_r2_source_rate(state, state->encoder_rate) < 0) {
-		return -EIO;
+	} else {
+		/* Keep the direct API call for the legacy R2-only encoder, then send
+		 * the wrapper's 2.2 configuration below.  The direct call is not the
+		 * Lossless switch; the wrapper parameter is. */
+		if (set_r2_source_rate(state, state->encoder_rate) < 0)
+			return -EIO;
+		if (configure_r2_capi(state) < 0)
+			return -EIO;
+		/* The wrapper can replace the encoder objects while switching from
+		 * R2 to its R3 kernel, so refresh these pointers before later calls. */
+		state->left_encoder = *(void **)(state->module_memory + 0xc4);
+		state->right_encoder = *(void **)(state->module_memory + 0xc8);
+		if (configure_bitrate_map(state) < 0)
+			return -EIO;
 	}
 	if (install_metadata_handler(state) < 0)
+		return -EIO;
+	if (configure_lossless_feedback(state) < 0)
+		return -EIO;
+	if (state->abr_enabled && send_imcl_quality_level(state, 5) < 0)
 		return -EIO;
 	return 0;
 }
@@ -491,16 +769,10 @@ static int configure(struct helper_state *state,
 		requested != APTX_ADAPTIVE_HELPER_MODE_R3)
 		return -EINVAL;
 
-	if (requested == APTX_ADAPTIVE_HELPER_MODE_AUTO) {
-		/* R3 in the available CPH2749 blob is a 48 kHz profile.  Prefer it
-		 * only for a 48 kHz session; all other native rates use R2. */
-		if (config->encoder_rate == 48000 &&
-				initialize_mode(state, config,
-						APTX_ADAPTIVE_HELPER_MODE_R3) == 0)
-			return 0;
-		end_module(state);
+	if (requested == APTX_ADAPTIVE_HELPER_MODE_AUTO)
+		/* The R2 CAPI wrapper is the entry point that carries the 2.2
+		 * capability stream and the Lossless state machine. */
 		requested = APTX_ADAPTIVE_HELPER_MODE_R2;
-	}
 
 	int result = initialize_mode(state, config, requested);
 	if (result < 0)
@@ -516,8 +788,32 @@ static void reset_r3_input_cursors(struct helper_state *state)
 			*(uint32_t *)(state->module_memory + R3_RIGHT_WRITE_CURSOR);
 }
 
+static int set_quality_level(struct helper_state *state, uint32_t quality_level)
+{
+	if (!state->initialized || quality_level == 0 ||
+			quality_level > APTX_ADAPTIVE_MAX_ABR_LEVELS)
+		return -EINVAL;
+	return send_imcl_quality_level(state, quality_level);
+}
+
 static int set_bitrate(struct helper_state *state, uint32_t bitrate)
 {
+	static const uint32_t bitrates[APTX_ADAPTIVE_MAX_ABR_LEVELS] = {
+		279000, 320000, 352000, 384000, 420000,
+	};
+
+	/* The host-side legacy command carries a bitrate.  Translate the known
+	 * Adaptive levels to the same IMCL quality feedback used by AudioReach;
+	 * this prevents the old direct encoder API from bypassing the wrapper's
+	 * R2.2 state machine. */
+	for (size_t i = 0; i < APTX_ADAPTIVE_MAX_ABR_LEVELS; ++i)
+		if (bitrates[i] == bitrate)
+			return set_quality_level(state, (uint32_t)i + 1);
+
+	/* Explicit direct bitrates remain available for the standalone R3 probe,
+	 * but they are not a Lossless control path. */
+	if (state->mode == APTX_ADAPTIVE_HELPER_MODE_R2)
+		return -EINVAL;
 	set_bitrate_fn setter = state->mode == APTX_ADAPTIVE_HELPER_MODE_R3 ?
 			state->set_bitrate3 : state->set_bitrate2;
 	if (setter == NULL)
@@ -547,7 +843,7 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 		.max_data_len = pcm_size,
 	};
 	capi_stream_data_v2_t input_stream = {
-		.flags = { .word = 1u << 7 },
+		.flags = { .stream_data_version = CAPI_STREAM_V2 },
 		.buf_ptr = &input_buffer,
 		.bufs_num = 1,
 		.metadata_list_ptr = NULL,
@@ -570,13 +866,13 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 	};
 	capi_stream_data_v2_t output_streams[2] = {
 		{
-			.flags = { .word = 1u << 7 },
+		.flags = { .stream_data_version = CAPI_STREAM_V2 },
 			.buf_ptr = &output_buffers[0],
 			.bufs_num = 1,
 			.metadata_list_ptr = NULL,
 		},
 		{
-			.flags = { .word = 1u << 7 },
+		.flags = { .stream_data_version = CAPI_STREAM_V2 },
 			.buf_ptr = &output_buffers[1],
 			.bufs_num = 1,
 			.metadata_list_ptr = NULL,
@@ -586,17 +882,26 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 		(capi_stream_data_t *)&output_streams[0],
 		(capi_stream_data_t *)&output_streams[1],
 	};
-	if (state->mode == APTX_ADAPTIVE_HELPER_MODE_R2)
+	const bool r3_kernel = state->mode == APTX_ADAPTIVE_HELPER_MODE_R3 ||
+			*(uint8_t *)(state->module_memory + 0x24d) == 3;
+	/* The R2 wrapper may now be executing its embedded R3 kernel after the
+	 * 2.2 custom init parameter.  Preserve both output-port descriptors for
+	 * that case; only a genuine R2 kernel is SISO. */
+	if (!r3_kernel)
 		outputs[1] = NULL;
 
-	capi_err_t result = state->module->vtbl_ptr->process(state->module,
-			inputs, outputs);
-	if (state->mode == APTX_ADAPTIVE_HELPER_MODE_R3)
+	state->module->vtbl_ptr->process(state->module, inputs, outputs);
+	if (r3_kernel)
 		reset_r3_input_cursors(state);
 
 	size_t produced = output_buffers[0].actual_data_len;
-	if (produced == 0 || produced > MAX_PACKET_SIZE)
-		return result == CAPI_EOK ? -EAGAIN : -EIO;
+	if (produced == 0 || produced > MAX_PACKET_SIZE) {
+		/* The extracted wrapper reports CAPI_EFAILED while it is buffering a
+		 * complete frame (and may also report it after metadata propagation),
+		 * so an empty output is the only reliable indication that the host
+		 * should continue feeding audio. */
+		return produced == 0 ? -EAGAIN : -EIO;
+	}
 
 	struct aptx_adaptive_ota_header header;
 	const uint8_t *payload;
@@ -624,6 +929,11 @@ static int process_control(struct helper_state *state, uint32_t command,
 		if (payload_size != sizeof(uint32_t) || !state->initialized)
 			return -EINVAL;
 		return set_bitrate(state, read_u32le(payload));
+	}
+	if (command == APTX_ADAPTIVE_HELPER_COMMAND_SET_QUALITY_LEVEL) {
+		if (payload_size != sizeof(uint32_t) || !state->initialized)
+			return -EINVAL;
+		return set_quality_level(state, read_u32le(payload));
 	}
 	return -ENOTSUP;
 }
@@ -675,11 +985,19 @@ int main(void)
 			struct helper_config default_config = {
 				.source_rate = 48000,
 				.encoder_rate = 48000,
-				.mode = APTX_ADAPTIVE_HELPER_MODE_R3,
+				.mode = APTX_ADAPTIVE_HELPER_MODE_AUTO,
 				.profile = DEFAULT_PROFILE,
 				.mtu = 995,
 				.abr_enabled = 0,
+				.bits_per_sample = 32,
+				.lossless_mode = APTX_ADAPTIVE_HELPER_LOSSLESS_OFF,
+				.qhs_supported = false,
 			};
+			static const uint8_t default_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE] = {
+				1, 151, 0, 0, 15, 2, 3, 3, 3, 0, 170,
+			};
+			memcpy(default_config.r2_stream, default_stream,
+					sizeof(default_stream));
 			if (configure(&state, &default_config) < 0)
 				break;
 		}

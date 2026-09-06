@@ -18,18 +18,31 @@ toolchain and module revision:
 
 `aptx-lossless-helper.c` is the unified adapter. It accepts a small control
 message from the host before audio starts and selects the requested R2 or R3
-entry point. In automatic mode it prefers the verified R3 profile for a 48 kHz
-session and uses the R2 CAPI entry point for native 44.1/96 kHz sessions (R2
-can be selected explicitly for 48 kHz).
-The R3 profile is still selected as profile 6 by default, which is the profile
-observed next to `g_aSelectConfig_Lossless_48` in the v3 library. This is an
-observation about one proprietary build, not an independently verified
-specification.
+entry point. In automatic mode it uses the R2 CAPI wrapper, which is the
+available entry point for the observed 2.2 capability stream and 44.1 kHz
+state machine. The direct R3 entry point remains available for explicitly
+requested 48 kHz experiments.
+
+The helper protocol is version 2. Its configuration adds the input sample
+word size, a Lossless policy (`off`, conservative `auto`, or explicit
+`force`), and an explicit QHS capability assertion. The helper passes
+interleaved S32/Q27 PCM to the proprietary CAPI module. A S16/44.1 session is
+widened exactly to that representation, and its original word size is sent
+through the observed Bluetooth sideband before the 2.2 Lossless candidate
+path may be selected. `auto` requires the host to assert QHS; `force` only
+controls the feedback sent to the module and cannot add QHS to a Bluetooth
+controller that does not implement it.
 
 The host can also feed 88.2 kHz and 192 kHz graph streams by supplying the
 corresponding exact 2:1 down-converted PCM to the helper: 88.2 kHz maps to the
 R2 44.1 kHz mode and 192 kHz maps to the R2 96 kHz mode. The helper itself
 always receives 672 codec frames per audio request.
+
+The PipeWire bridge uses the observed 11-byte capability stream by default
+and accepts an optional `APTX_ADAPTIVE_CONFIG_STREAM_HEX` override containing
+exactly 22 hexadecimal digits. This is necessary when a receiver exposes a
+different opaque stream; the current BlueZ/PipeWire A2DP codec structure does
+not carry Android's separate `aptxAdaptiveConfigStream` field.
 
 The unified adapter also includes `aptxadaptive.h` from the parent project and
 needs `-I/path/to/openaptx/include`, `-ldl`, and `-lm` in its link command.
@@ -78,6 +91,11 @@ compatible `qemu-hexagon -L` sysroot. After startup the helper emits one
 zero-status/zero-length readiness header. The host then sends a control frame
 with the `aptx_adaptive_helper_config` layout from `aptxadaptive.h`, followed by
 the steady-state protocol of one 32-bit little-endian PCM byte count,
-interleaved S32 PCM, and a response header followed by one complete Adaptive
-OTA packet. A second control command carries a 32-bit target bitrate and is
-used by the host-side ABR loop.
+interleaved S32/Q27 PCM, and a response header followed by one complete
+Adaptive OTA packet. A second control command carrying a legacy bitrate is
+translated to a 1..5 IMCL quality level when possible; the version-2
+quality-level command is preferred by the PipeWire bridge.
+
+The openaptx parser recognizes the observed `0xaf` OTA marker as R2.2. This is
+an observation about the supplied Qualcomm build and does not constitute a
+clean-room aptX Lossless implementation or proof of bit-perfect decoding.
