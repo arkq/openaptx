@@ -88,7 +88,7 @@ static int aptx_ffmpeg_init_codec(struct internal_ctx * ctx, const AVCodec * cod
 }
 
 static void aptx_ffmpeg_destroy(struct internal_ctx * ctx) {
-	if (ctx != NULL)
+	if (ctx == NULL)
 		return;
 	av_frame_free(&ctx->av_frame);
 	av_packet_free(&ctx->av_packet);
