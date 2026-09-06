@@ -12,9 +12,10 @@
 #include "aptxadaptive.h"
 
 /*
- * These values are the payload-size table used by the R3 SlimBus-to-AX3
- * reference converter in openaptx PR #9. They are transport values, not
- * codec frame sizes derived from an aptX Adaptive specification.
+ * These values are the payload-size table observed in the R2/R3
+ * SlimBus-to-AX3 reference converter and the CPH2749 CAPI encoder. They are
+ * transport values, not codec frame sizes derived from an aptX Adaptive
+ * specification.
  */
 static const uint16_t payload_sizes[] = {
 	348, 656, 140, 152, 560, 760, 960, 348, 980,
@@ -55,11 +56,23 @@ int aptx_adaptive_parse_ota_header(const uint8_t data[APTX_ADAPTIVE_OTA_HEADER_S
 	if (data[3] >= sizeof(payload_sizes) / sizeof(payload_sizes[0]))
 		return -EINVAL;
 
+	enum aptx_adaptive_ota_version version;
+	switch (data[7]) {
+	case 0xae:
+		version = APTX_ADAPTIVE_OTA_R2;
+		break;
+	case 0xad:
+		version = APTX_ADAPTIVE_OTA_R3;
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	uint8_t decoder_channel_mode;
 	if (channel_mode_decoder_id(data[4], &decoder_channel_mode) != 0)
 		return -EINVAL;
 
-	header->ttp = (uint16_t)data[0] | (uint16_t)data[1] << 8;
+	header->ttp = (uint16_t)((uint16_t)data[0] | (uint16_t)data[1] << 8);
 	header->period = data[2];
 	header->packet_type = data[3];
 	header->channel_mode = data[4];
@@ -67,6 +80,7 @@ int aptx_adaptive_parse_ota_header(const uint8_t data[APTX_ADAPTIVE_OTA_HEADER_S
 			(uint32_t)data[6] << 16 | (uint32_t)data[7] << 24;
 	header->payload_size = payload_sizes[data[3]];
 	header->decoder_channel_mode = decoder_channel_mode;
+	header->version = version;
 
 	return 0;
 }

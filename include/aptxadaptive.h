@@ -1,13 +1,12 @@
 /**
  * @file aptxadaptive.h
- * @brief Research-only parser for the aptX Adaptive R3 OTA transport header.
+ * @brief Research-only parser for the aptX Adaptive OTA transport header.
  *
  * This project is licensed under the terms of the MIT license.
  *
- * The parser describes the eight-byte SlimBus/AX3 transport header observed
- * in the Qualcomm reference converter archived by openaptx PR #9. It does not
- * implement the aptX Adaptive audio codec and is not an A2DP capability
- * negotiation interface.
+ * The parser describes the eight-byte transport header observed in Qualcomm
+ * Adaptive R2 and R3 encoder output. It does not implement the aptX Adaptive
+ * audio codec and is not an A2DP capability negotiation interface.
  */
 
 #ifndef OPENAPTX_APTXADAPTIVE_H_
@@ -23,7 +22,46 @@ extern "C" {
 #define APTX_ADAPTIVE_OTA_HEADER_SIZE 8
 #define APTX_ADAPTIVE_OTA_PACKET_TYPE_COUNT 9
 
-/** Parsed fields from one R3 OTA transport header. */
+/* The following small protocol is used only by the research helper under
+ * research/aptx-adaptive-qemu.  It deliberately carries no Qualcomm code or
+ * binary data; it only describes how the host-side PipeWire bridge asks the
+ * user-supplied Hexagon adapter to select a codec revision and bitrate. */
+#define APTX_ADAPTIVE_HELPER_CONTROL UINT32_MAX
+#define APTX_ADAPTIVE_HELPER_PROTOCOL_VERSION 1u
+#define APTX_ADAPTIVE_HELPER_COMMAND_CONFIG 1u
+#define APTX_ADAPTIVE_HELPER_COMMAND_SET_BITRATE 2u
+#define APTX_ADAPTIVE_HELPER_CIE_SIZE 40u
+#define APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE 11u
+
+enum aptx_adaptive_helper_mode {
+	APTX_ADAPTIVE_HELPER_MODE_AUTO = 0,
+	APTX_ADAPTIVE_HELPER_MODE_R2 = 2,
+	APTX_ADAPTIVE_HELPER_MODE_R3 = 3,
+};
+
+/* All integer fields are little-endian on the wire.  The packed declaration
+ * makes the layout explicit for the little-endian Hexagon helper; callers
+ * should still fill integer fields using their platform's little-endian
+ * representation or serialize them explicitly. */
+struct aptx_adaptive_helper_config {
+	uint32_t protocol_version;
+	uint32_t source_rate;
+	uint32_t encoder_rate;
+	uint32_t mode;
+	uint32_t profile;
+	uint32_t mtu;
+	uint32_t abr_enabled;
+	uint32_t cie_size;
+	uint8_t cie[APTX_ADAPTIVE_HELPER_CIE_SIZE];
+	uint8_t r2_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE];
+} __attribute__((packed));
+
+enum aptx_adaptive_ota_version {
+	APTX_ADAPTIVE_OTA_R2 = 2,
+	APTX_ADAPTIVE_OTA_R3 = 3,
+};
+
+/** Parsed fields from one Adaptive OTA transport header. */
 struct aptx_adaptive_ota_header {
 	/** Time-to-play field, encoded little-endian. */
 	uint16_t ttp;
@@ -39,10 +77,12 @@ struct aptx_adaptive_ota_header {
 	size_t payload_size;
 	/** Decoder channel-mode ID associated with channel_mode. */
 	uint8_t decoder_channel_mode;
+	/** Encoder revision marker: R2 (0xae) or R3 (0xad). */
+	enum aptx_adaptive_ota_version version;
 };
 
 /**
- * Parse an eight-byte R3 OTA transport header.
+ * Parse an eight-byte Adaptive OTA transport header.
  *
  * @param data At least APTX_ADAPTIVE_OTA_HEADER_SIZE bytes of input.
  * @param header Destination structure.
@@ -52,7 +92,7 @@ int aptx_adaptive_parse_ota_header(const uint8_t data[APTX_ADAPTIVE_OTA_HEADER_S
 		struct aptx_adaptive_ota_header *header);
 
 /**
- * Parse one complete R3 OTA packet without copying its payload.
+ * Parse one complete Adaptive OTA packet without copying its payload.
  *
  * @param data Input buffer.
  * @param size Number of bytes available in data.
