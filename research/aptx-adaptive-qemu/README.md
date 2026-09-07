@@ -40,9 +40,10 @@ always receives 672 codec frames per audio request.
 The PipeWire bridge derives the 11-byte R2/R2.2 extension stream from the
 negotiated Qualcomm A2DP codec information (including the peer feature mask
 and extension version). It accepts an optional
-`APTX_ADAPTIVE_CONFIG_STREAM_HEX` override containing exactly 22 hexadecimal
-digits for controlled diagnostics; that override is not used by the normal
-configuration path.
+`APTX_ADAPTIVE_CONFIG_STREAM_OVERRIDE_HEX` override containing exactly 22
+hexadecimal digits for controlled diagnostics. The normal configuration does
+not read the older `APTX_ADAPTIVE_CONFIG_STREAM_HEX` variable, because a stale
+fixed stream can silently replace the peer's negotiated CIE.
 
 The unified adapter also includes `aptxadaptive.h` from the parent project and
 needs `-I/path/to/openaptx/include`, `-ldl`, and `-lm` in its link command.
