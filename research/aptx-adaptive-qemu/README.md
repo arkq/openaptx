@@ -19,9 +19,8 @@ toolchain and module revision:
 `aptx-lossless-helper.c` is the unified adapter. It accepts a small control
 message from the host before audio starts and selects the requested R2 or R3
 entry point. In automatic mode it uses the R2 CAPI wrapper, which is the
-available entry point for the observed 2.2 capability stream and 44.1 kHz
-state machine. The direct R3 entry point remains available for explicitly
-requested 48 kHz experiments.
+available entry point for the observed R2/R2.2 Adaptive stream. The direct R3
+entry point remains available for explicitly requested 48 kHz experiments.
 
 The helper protocol is version 2. Its configuration adds the input sample
 word size, a Lossless policy (`off`, conservative `auto`, or explicit
@@ -38,11 +37,12 @@ corresponding exact 2:1 down-converted PCM to the helper: 88.2 kHz maps to the
 R2 44.1 kHz mode and 192 kHz maps to the R2 96 kHz mode. The helper itself
 always receives 672 codec frames per audio request.
 
-The PipeWire bridge uses the observed 11-byte capability stream by default
-and accepts an optional `APTX_ADAPTIVE_CONFIG_STREAM_HEX` override containing
-exactly 22 hexadecimal digits. This is necessary when a receiver exposes a
-different opaque stream; the current BlueZ/PipeWire A2DP codec structure does
-not carry Android's separate `aptxAdaptiveConfigStream` field.
+The PipeWire bridge derives the 11-byte R2/R2.2 extension stream from the
+negotiated Qualcomm A2DP codec information (including the peer feature mask
+and extension version). It accepts an optional
+`APTX_ADAPTIVE_CONFIG_STREAM_HEX` override containing exactly 22 hexadecimal
+digits for controlled diagnostics; that override is not used by the normal
+configuration path.
 
 The unified adapter also includes `aptxadaptive.h` from the parent project and
 needs `-I/path/to/openaptx/include`, `-ldl`, and `-lm` in its link command.

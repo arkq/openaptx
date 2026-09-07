@@ -76,7 +76,6 @@ extern capi_err_t aptx_adaptive3_enc_init(capi_t *module,
 extern capi_vtbl_t *get_aptx_adaptive3_vtable(void);
 
 typedef int (*set_bitrate_fn)(void *encoder, uint32_t bitrate);
-typedef int (*set_source_rate_fn)(void *encoder, uint32_t rate);
 typedef int (*set_profile_fn)(void *encoder, int profile, int force);
 
 struct media_format_storage {
@@ -168,7 +167,6 @@ struct helper_state {
 	void *codec_library3;
 	set_bitrate_fn set_bitrate2;
 	set_bitrate_fn set_bitrate3;
-	set_source_rate_fn set_source_rate2;
 	set_profile_fn set_profile;
 
 	void *left_encoder;
@@ -351,7 +349,6 @@ static void close_codec_libraries(struct helper_state *state)
 	state->codec_library3 = NULL;
 	state->set_bitrate2 = NULL;
 	state->set_bitrate3 = NULL;
-	state->set_source_rate2 = NULL;
 	state->set_profile = NULL;
 }
 
@@ -413,9 +410,6 @@ static void resolve_codec_symbols(struct helper_state *state)
 	if (state->codec_library2 != NULL)
 		state->set_bitrate2 = (set_bitrate_fn)dlsym(state->codec_library2,
 				"aptXEncode_SetBitRate");
-	if (state->codec_library2 != NULL)
-		state->set_source_rate2 = (set_source_rate_fn)dlsym(
-				state->codec_library2, "aptXEncode_SetSourceSamplingRate");
 	if (state->codec_library3 != NULL) {
 		state->set_bitrate3 = (set_bitrate_fn)dlsym(state->codec_library3,
 				"aptX3Encode_SetBitRate");
@@ -665,18 +659,6 @@ static int configure_lossless_feedback(struct helper_state *state)
 	return 0;
 }
 
-static int set_r2_source_rate(struct helper_state *state, uint32_t rate)
-{
-	if (state->set_source_rate2 == NULL || state->left_encoder == NULL)
-		return -ENOTSUP;
-	if (state->set_source_rate2(state->left_encoder, rate) != 0)
-		return -EIO;
-	if (state->right_encoder != NULL &&
-			state->set_source_rate2(state->right_encoder, rate) != 0)
-		return -EIO;
-	return 0;
-}
-
 static int initialize_mode(struct helper_state *state,
 		const struct helper_config *config,
 		enum aptx_adaptive_helper_mode mode)
@@ -736,11 +718,10 @@ static int initialize_mode(struct helper_state *state,
 				state->set_profile(state->right_encoder, (int)state->profile, 0) != 0)
 			return -EIO;
 	} else {
-		/* Keep the direct API call for the legacy R2-only encoder, then send
-		 * the wrapper's 2.2 configuration below.  The direct call is not the
-		 * Lossless switch; the wrapper parameter is. */
-		if (set_r2_source_rate(state, state->encoder_rate) < 0)
-			return -EIO;
+		/* The Qualcomm host path selects the native rate through the CAPI
+		 * Adaptive-init payload.  Do not call the legacy direct setter first:
+		 * doing so can configure a different encoder object before the wrapper
+		 * applies the negotiated R2/R2.2 stream. */
 		if (configure_r2_capi(state) < 0)
 			return -EIO;
 		/* The wrapper can replace the encoder objects while switching from
