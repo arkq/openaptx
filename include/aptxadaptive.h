@@ -70,6 +70,8 @@ struct aptx_adaptive_helper_config {
 	uint32_t qhs_supported;
 	uint32_t cie_size;
 	uint8_t cie[APTX_ADAPTIVE_HELPER_CIE_SIZE];
+	/* The negotiated Qualcomm R2/R2.2 extension stream, not a fixed local
+	 * capability record.  The PipeWire host derives it from the peer CIE. */
 	uint8_t r2_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE];
 } __attribute__((packed));
 
