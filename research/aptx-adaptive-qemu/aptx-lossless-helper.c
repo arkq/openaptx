@@ -694,11 +694,10 @@ static int initialize_mode(struct helper_state *state,
 		if (result != CAPI_EOK)
 			return -EIO;
 		state->module->vtbl_ptr = get_aptx_adaptive3_vtable();
-	} else {
-		/* The outer CAPI wrapper is the R2/R2.2 entry point.  Its direct
-		 * encoder API exposes the source-rate selector used by Qualcomm's
-		 * host path, so the native 44.1/48/96 kHz mode is selected without
-		 * pretending that the opaque A2DP extension is a public specification. */
+		} else {
+		/* The outer CAPI wrapper is the R2/R2.2 entry point.  Its Adaptive-init
+		 * payload selects the native 44.1/48/96 kHz mode without pretending
+		 * that the opaque A2DP extension is a public specification. */
 		if (load_codec_library(state, 2) < 0)
 			return -ENOENT;
 		result = capi_aptx_adaptive_enc_init(state->module, &state->init);
