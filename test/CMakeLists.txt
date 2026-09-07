@@ -2,6 +2,11 @@
 # SPDX-FileCopyrightText: 2017-2026 [open]aptx developers
 # SPDX-License-Identifier: MIT
 
+add_executable(aptx-lifecycle-test aptx-lifecycle.c)
+target_compile_features(aptx-lifecycle-test PRIVATE c_std_11)
+target_link_libraries(aptx-lifecycle-test PRIVATE aptx)
+add_test(NAME aptx-lifecycle COMMAND aptx-lifecycle-test)
+
 if(ENABLE_APTX422)
 
 	add_library(qualcomm_libaptx SHARED IMPORTED)
