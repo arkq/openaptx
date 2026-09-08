@@ -71,6 +71,8 @@ _Static_assert(sizeof(struct aptx_adaptive_helper_config) == 95,
 
 extern capi_err_t capi_aptx_adaptive_enc_init(capi_t *module,
 		capi_proplist_t *init_set_properties);
+extern capi_err_t capi_aptx_adaptive_enc_get_static_properties(
+		capi_proplist_t *init_set_proplist, capi_proplist_t *static_proplist);
 extern capi_err_t aptx_adaptive3_enc_init(capi_t *module,
 		capi_proplist_t *init_set_properties);
 extern capi_vtbl_t *get_aptx_adaptive3_vtable(void);
@@ -180,12 +182,40 @@ struct helper_state {
 	bool initialized;
 };
 
+static bool helper_verbose(void)
+{
+	return getenv("APTX_ADAPTIVE_VERBOSE") != NULL;
+}
+
 static capi_err_t event_callback(void *context, capi_event_id_t id,
 		capi_event_info_t *event)
 {
 	(void)context;
-	(void)id;
-	(void)event;
+	/* A real AudioReach container acts on these events.  The standalone
+	 * adapter only reports them so an operator can see what the module asks
+	 * for.  The important one is FWK_EXTN_BT_CODEC /
+	 * CAPI_BT_CODEC_EXTN_EVENT_ID_DISABLE_PREBUFFER (0x000132e5), which tells
+	 * the container to disable its one-time pre-buffering. */
+	if (helper_verbose() && id == CAPI_EVENT_DATA_TO_DSP_SERVICE && event != NULL &&
+			event->payload.data_ptr != NULL &&
+			event->payload.actual_data_len >= sizeof(capi_event_data_to_dsp_service_t)) {
+		const capi_event_data_to_dsp_service_t *d =
+			(const capi_event_data_to_dsp_service_t *)event->payload.data_ptr;
+		if (d->param_id == 0x000132e5 &&
+				d->payload.actual_data_len >= sizeof(uint32_t))
+			fprintf(stderr, "aptx-adaptive-helper: module event "
+				"DISABLE_PREBUFFER=%u\n",
+				(unsigned)*(const uint32_t *)d->payload.data_ptr);
+		else if (d->param_id == 0x000132e7 &&
+				d->payload.actual_data_len >= sizeof(uint32_t))
+			fprintf(stderr, "aptx-adaptive-helper: module event "
+				"KPPS_SCALE_FACTOR=0x%x\n",
+				(unsigned)*(const uint32_t *)d->payload.data_ptr);
+		else
+			fprintf(stderr, "aptx-adaptive-helper: module event "
+				"param_id=0x%08x len=%u\n",
+				d->param_id, (unsigned)d->payload.actual_data_len);
+	}
 	return CAPI_EOK;
 }
 
@@ -669,6 +699,102 @@ static int configure_lossless_feedback(struct helper_state *state)
 	return 0;
 }
 
+/*
+ * A real AudioReach container calls get_static_properties() before init and
+ * sizes the module memory from CAPI_INIT_MEMORY_REQUIREMENT.  This adapter
+ * historically skipped that step and always used a 1 MiB buffer.  Query the
+ * contract, report it, and grow the allocation if the module asks for more
+ * than the floor.  (Measured for the CPH2749 build: init_memory=116144,
+ * stack=15000, requires_data_buffering=TRUE, one FWK_EXTN_BT_CODEC extension,
+ * input port threshold 384 bytes, output port threshold 2008 bytes.)
+ */
+static int query_static_properties(struct helper_state *state)
+{
+	capi_init_memory_requirement_t mem = { 0 };
+	capi_stack_size_t stack = { 0 };
+	capi_is_inplace_t inplace = { 0 };
+	capi_requires_data_buffering_t buffering = { 0 };
+	capi_num_needed_framework_extensions_t nfwe = { 0 };
+	capi_framework_extension_id_t fwe[16];
+	capi_prop_t props[6];
+	capi_proplist_t list = { 6, props };
+	capi_err_t err;
+
+	memset(props, 0, sizeof(props));
+#define QUERY(i, id_, var_) do { \
+		props[i].id = id_; \
+		props[i].payload.data_ptr = (int8_t *)&var_; \
+		props[i].payload.actual_data_len = 0; \
+		props[i].payload.max_data_len = sizeof(var_); \
+	} while (0)
+	QUERY(0, CAPI_INIT_MEMORY_REQUIREMENT, mem);
+	QUERY(1, CAPI_STACK_SIZE, stack);
+	QUERY(2, CAPI_IS_INPLACE, inplace);
+	QUERY(3, CAPI_REQUIRES_DATA_BUFFERING, buffering);
+	QUERY(4, CAPI_NUM_NEEDED_FRAMEWORK_EXTENSIONS, nfwe);
+	props[5].id = CAPI_NEEDED_FRAMEWORK_EXTENSIONS;
+	props[5].payload.data_ptr = (int8_t *)fwe;
+	props[5].payload.max_data_len = sizeof(fwe);
+#undef QUERY
+
+	err = capi_aptx_adaptive_enc_get_static_properties(&state->init, &list);
+	if (err != CAPI_EOK)
+		return -EIO;
+
+	if (!helper_verbose())
+		goto grow;
+	fprintf(stderr, "aptx-adaptive-helper: static properties: init_memory=%u "
+		"stack=%u inplace=%d requires_data_buffering=%d extensions=%u\n",
+		mem.size_in_bytes, stack.size_in_bytes, (int)inplace.is_inplace,
+		(int)buffering.requires_data_buffering, nfwe.num_extensions);
+	for (uint32_t i = 0; i < nfwe.num_extensions && i < 16; ++i)
+		fprintf(stderr, "aptx-adaptive-helper:   framework extension 0x%08x%s\n",
+				fwe[i].id, fwe[i].id == 0x000132e4 ? " (FWK_EXTN_BT_CODEC)" : "");
+
+grow:
+	if (mem.size_in_bytes > MODULE_MEMORY_SIZE) {
+		uint8_t *bigger = realloc(state->module_memory, mem.size_in_bytes);
+		if (bigger == NULL)
+			return -ENOMEM;
+		state->module_memory = bigger;
+		state->module = (capi_t *)bigger;
+		fprintf(stderr, "aptx-adaptive-helper: module memory grown to %u bytes\n",
+				mem.size_in_bytes);
+	}
+	return 0;
+}
+
+/* Query the per-port data thresholds a container needs for a module that
+ * requires data buffering. */
+static void query_port_thresholds(struct helper_state *state)
+{
+	capi_port_data_threshold_t in_thr = { 0 }, out_thr = { 0 };
+	capi_prop_t props[2];
+	capi_proplist_t list = { 2, props };
+
+	memset(props, 0, sizeof(props));
+	props[0].id = CAPI_PORT_DATA_THRESHOLD;
+	props[0].payload.data_ptr = (int8_t *)&in_thr;
+	props[0].payload.max_data_len = sizeof(in_thr);
+	props[0].port_info.is_valid = 1;
+	props[0].port_info.is_input_port = 1;
+	props[0].port_info.port_index = 0;
+	props[1].id = CAPI_PORT_DATA_THRESHOLD;
+	props[1].payload.data_ptr = (int8_t *)&out_thr;
+	props[1].payload.max_data_len = sizeof(out_thr);
+	props[1].port_info.is_valid = 1;
+	props[1].port_info.is_input_port = 0;
+	props[1].port_info.port_index = 0;
+
+	if (state->module->vtbl_ptr->get_properties(state->module, &list) != CAPI_EOK)
+		return;
+	if (!helper_verbose())
+		return;
+	fprintf(stderr, "aptx-adaptive-helper: port data thresholds: "
+			"input=%u bytes output=%u bytes\n",
+			in_thr.threshold_in_bytes, out_thr.threshold_in_bytes);
+}
+
 static int initialize_mode(struct helper_state *state,
 		const struct helper_config *config,
 		enum aptx_adaptive_helper_mode mode)
@@ -715,6 +841,10 @@ static int initialize_mode(struct helper_state *state,
 	state->lossless_eligible = false;
 	reset_module_storage(state);
 	prepare_init_properties(state, state->encoder_rate);
+	/* get_static_properties() must be called with the same init property list
+	 * that init() will receive, before init(). */
+	if (query_static_properties(state) < 0)
+		return -EIO;
 
 	capi_err_t result;
 	if (mode == APTX_ADAPTIVE_HELPER_MODE_R3) {
@@ -736,6 +866,7 @@ static int initialize_mode(struct helper_state *state,
 	}
 	state->initialized = true;
 	resolve_codec_symbols(state);
+	query_port_thresholds(state);
 
 	state->left_encoder = *(void **)(state->module_memory + 0xc4);
 	state->right_encoder = *(void **)(state->module_memory + 0xc8);
