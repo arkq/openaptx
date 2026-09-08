@@ -54,14 +54,27 @@ audio_reach=/path/to/audioreach-engine
 host_lib=/path/to/host/toolchain/libs
 export LD_LIBRARY_PATH="$host_lib"
 
+# libgcc.so must export every builtin the proprietary modules reference.
+# libaptXAdaptiveEnc3.so (the R3/Lossless kernel) needs the 64-bit integer
+# division/modulo builtins; omitting them makes the module resolve the symbol
+# to nothing and fault as soon as the 64-bit path is taken (observed as a
+# SIGSEGV during configure on the 44.1 kHz path).  The complete list matches
+# the symbols exported by the reference libgcc.so:
+#   __hexagon_{div,mod,udiv,umod}{si3,di3}, __hexagon_div{df,sf}3,
+#   __hexagon_memcpy_likely_aligned_min32bytes_mult8bytes and the __qdsp_*
+#   aliases.
 "$toolchain/x86_64-linux-gnu/bin/hexagon-unknown-linux-musl-clang" \
   -O2 -fPIC -shared -Wl,-soname,libgcc.so \
-  -Wl,-u,__hexagon_divsi3 -Wl,-u,__hexagon_modsi3 \
-  -Wl,-u,__hexagon_udivsi3 -Wl,-u,__hexagon_divdf3 \
-  -Wl,-u,__hexagon_divsf3 \
+  -Wl,-u,__hexagon_divsi3 -Wl,-u,__hexagon_modsi3 -Wl,-u,__hexagon_udivsi3 \
+  -Wl,-u,__hexagon_umodsi3 -Wl,-u,__hexagon_divdi3 -Wl,-u,__hexagon_moddi3 \
+  -Wl,-u,__hexagon_udivdi3 -Wl,-u,__hexagon_umoddi3 \
+  -Wl,-u,__hexagon_divdf3 -Wl,-u,__hexagon_divsf3 \
   -Wl,-u,__hexagon_memcpy_likely_aligned_min32bytes_mult8bytes \
-	-Wl,-u,__qdsp_memcpy_likely_aligned_min32bytes_mult8bytes \
-	compat.c -lm -o libgcc.so
+  -Wl,-u,__qdsp_divsi3 -Wl,-u,__qdsp_modsi3 -Wl,-u,__qdsp_udivsi3 \
+  -Wl,-u,__qdsp_umodsi3 -Wl,-u,__qdsp_divdi3 -Wl,-u,__qdsp_moddi3 \
+  -Wl,-u,__qdsp_udivdi3 -Wl,-u,__qdsp_umoddi3 \
+  -Wl,-u,__qdsp_memcpy_likely_aligned_min32bytes_mult8bytes \
+  compat.c -lm -o libgcc.so
 
 "$toolchain/x86_64-linux-gnu/bin/hexagon-unknown-linux-musl-clang" \
   -O2 -fPIC \
@@ -84,6 +97,53 @@ export LD_LIBRARY_PATH="$host_lib"
   -l:aptx_adaptive_enc_module.so.1 -l:libgcc.so \
   -o aptx-lossless-helper
 ```
+
+### CAPI initialization contract
+
+The helper now follows the AudioReach container sequence: it calls
+`capi_aptx_adaptive_enc_get_static_properties()` with the same init property
+list that `init()` will receive, allocates at least
+`CAPI_INIT_MEMORY_REQUIREMENT` bytes, and queries `CAPI_PORT_DATA_THRESHOLD`
+after init.  For the CPH2749 build this reports:
+
+```text
+init_memory            = 116144 bytes
+stack_size             = 15000 bytes
+is_inplace             = 0
+requires_data_buffering = TRUE
+framework extensions   = 1 (FWK_EXTN_BT_CODEC 0x000132e4)
+```
+
+Set `APTX_ADAPTIVE_VERBOSE=1` to print these and the events the module raises
+during initialization (`DISABLE_PREBUFFER=1`, `KPPS_SCALE_FACTOR=0x40`).
+
+### R3 cursor investigation (open)
+
+The R3 kernel keeps four pointers at fixed offsets in the module memory
+(`0x6418`, `0x641c`, `0x6428`, `0x6430`).  Measured on the CPH2749 build with
+the 44.1 kHz Lossless-candidate configuration:
+
+- The left pair (`0x6418`/`0x641c`) stays constant.
+- The right pair advances: `0x6430` grows by one 672-sample S32 channel
+  (2688 bytes) per call, and `0x6428` is set to the previous `0x6430` value by
+  the adapter after each call.
+- `0x6420` holds the region start (33404) and `0x6434` the region end (66172),
+  i.e. a 32 KiB region at the start of the module memory.
+- After ~12 calls the right pointer reaches `0x6434` and the encoder stops
+  producing packets even though it still consumes every input sample.
+- Wrapping the pointer back to the region start, or resetting both right
+  pointers to their post-init values, either crashes the kernel or freezes the
+  output (only three distinct payloads, constant TTP).
+- The crash point scales with the module memory allocation (1 MiB -> call 94,
+  4 MiB -> call 364), which means the kernel keeps advancing the pointer past
+  the 32 KiB region instead of wrapping it.
+
+Until the consumer-side advance that the real AudioReach container performs is
+understood, the adapter refuses to call the kernel once a cursor approaches the
+allocation end (returns `EOVERFLOW` instead of letting the emulator die with
+SIGSEGV).  The ordinary R2 path does not use these cursors at all and is
+unaffected.
+
 
 Place the user-supplied `aptx_adaptive_enc_module.so.1`,
 `libaptXAdaptiveEnc.so`, and (for R3) the matching
