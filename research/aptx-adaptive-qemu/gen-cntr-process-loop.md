@@ -347,3 +347,44 @@ TTP: 0x04e2 -> 0x0659 -> 0x07d0 (Δ=375)   ← 正确递增
 R2 路径完全无退化：168/182 包，version 0xae/0xaf，全部 PASS。
 
 **至此 aptX Adaptive 与 aptX Lossless（R3）在本机均已跑通真实码流。**
+
+---
+
+## 8. R3 帧长实测：720 样本（15 ms）
+
+直接管线上线后发现一个关键事实：**R3 编码器每次调用消费 720 个样本**。
+
+用 672 样本块（插件原来的 `APTX_ADAPTIVE_CODEC_FRAMES`）时的实测日志：
+
+```
+eagain winL=672
+pkt    winL=624        ← 窗口 1344，编码后 624（消费 720）
+eagain winL=624
+eagain winL=1296
+pkt    winL=1248       ← 消费 720
+...
+```
+
+窗口每次净减 48 样本（720 - 672），约一半调用返回 EAGAIN。
+
+换成 **720 样本块**后：
+
+```
+frames=720 bytes=5760: packets=20 eagain=0
+rate=44100 FR=720: packets=12 eagain=0
+rate=48000 FR=720: packets=12 eagain=0
+rate=96000 FR=720: packets=12 eagain=0
+```
+
+**每调用恰好一包，窗口精确归零，44.1/48/96 kHz 全部稳定。**
+
+因此插件改为：R3 模式使用 `codec_frames = 720`（`APTX_ADAPTIVE_R3_CODEC_FRAMES`），
+R2/R2.2 保持 672；`helper_bytes`、`block_size`、`source_frames` 随之推导。
+
+端到端（已安装 .so，MODE=r3，LOSSLESS=force）：
+
+```
+44.1k / 48k / 96k / 44.1k-force   packets=400 errors=0 PASS
+```
+
+每个速率都是 **400 包 / 400 块，零丢包**。

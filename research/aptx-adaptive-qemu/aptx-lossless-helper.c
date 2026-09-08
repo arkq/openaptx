@@ -901,9 +901,9 @@ static int initialize_mode(struct helper_state *state,
 			 config->encoder_rate != 48000 &&
 			 config->encoder_rate != 96000))
 		return -EINVAL;
-	if (mode == APTX_ADAPTIVE_HELPER_MODE_R3 &&
-			config->encoder_rate != 48000)
-		return -ENOTSUP;
+	/* The direct R3 pipeline drives the codec library itself, so it works at
+	 * every rate the host negotiates (verified at 44.1/48/96 kHz).  Only the
+	 * CAPI-wrapper path had the 48 kHz restriction. */
 
 	state->source_rate = config->source_rate;
 	state->encoder_rate = config->encoder_rate;
@@ -1069,16 +1069,26 @@ static int process_audio_direct_r3(struct helper_state *state, const uint8_t *pc
 
 	/* The encoder needs at least two frames in the window (measured: one
 	 * frame returns 0xF015 and writes a single byte). */
-	if ((state->r3_in_l.end - state->r3_in_l.start) / 4 < 2 * frames)
-		return -EAGAIN;
+
 
 	state->r3_out_l.start = state->r3_out_l.end = state->r3_out_l.base;
 	state->r3_out_r.start = state->r3_out_r.end = state->r3_out_r.base;
 	res_l = state->encode3(state->left_encoder, &state->r3_in_l, &state->r3_out_l);
 	res_r = state->encode3(state->right_encoder, &state->r3_in_r, &state->r3_out_r);
-	if (res_l != 0 || res_r != 0)
-		return -EIO;
+	if (res_l != 0 || res_r != 0) {
+		if (getenv("APTX_R3_DEBUG"))
+			fprintf(stderr, "R3DBG enc res=%d/%d winL=%u winR=%u\n",
+				res_l, res_r,
+				(state->r3_in_l.end - state->r3_in_l.start) / 4,
+				(state->r3_in_r.end - state->r3_in_r.start) / 4);
+		return -EAGAIN;
+	}
 
+	if (getenv("APTX_R3_DEBUG"))
+		fprintf(stderr, "R3DBG pkt frames=%u winL=%u winR=%u res=%d/%d outEndL=%u\n",
+			frames, (state->r3_in_l.end - state->r3_in_l.start) / 4,
+			(state->r3_in_r.end - state->r3_in_r.start) / 4,
+			res_l, res_r, state->r3_out_l.end - state->r3_out_l.base);
 	produced = state->r3_out_l.end - state->r3_out_l.base;
 	if (produced == 0 || produced > state->r3_out_frame_bytes)
 		produced = state->r3_out_frame_bytes;
@@ -1101,9 +1111,9 @@ static int process_audio_direct_r3(struct helper_state *state, const uint8_t *pc
 	*packet_size = 8 + 2 * produced;
 	state->r3_ttp = ttp + 375; /* same step the R2 path uses per frame */
 
-	/* Advance the window and compact when the consumed prefix gets large. */
-	state->r3_in_l.start += frames * 4;
-	state->r3_in_r.start += frames * 4;
+	/* The encoder advances the input descriptor's start itself (measured:
+	 * 720 samples per call at 48 kHz).  Only compact when the consumed prefix
+	 * grows large. */
 	if (state->r3_in_l.start - state->r3_in_l.base > state->r3_ring_samples * 2) {
 		uint32_t left = state->r3_in_l.end - state->r3_in_l.start;
 		memmove(state->r3_ring_l,
