@@ -647,6 +647,16 @@ static int configure_lossless_feedback(struct helper_state *state)
 			!state->qhs_supported)
 		return 0;
 
+	/* The remaining feedback is an assertion, not a measurement.  Report it
+	 * loudly so an operator never mistakes a forced experiment for a link that
+	 * can actually carry Lossless. */
+	fprintf(stderr,
+		"aptx-adaptive-helper: WARNING: asserting QHS support and zero "
+		"2.4 GHz Wi-Fi activity to the encoder (lossless_mode=%d, "
+		"qhs_asserted=%d). A non-Qualcomm controller cannot provide QHS, so "
+		"the emitted Lossless packets may not survive the Bluetooth link.\n",
+		(int)state->lossless_mode, (int)state->qhs_supported);
+
 	/* These are the exact v1 feedback paths used by the 2.2 module.  The
 	 * force mode is intentionally explicit because a normal Intel controller
 	 * cannot supply Qualcomm High Speed Link/QHS status. */
@@ -681,7 +691,27 @@ static int initialize_mode(struct helper_state *state,
 	state->bits_per_sample = config->bits_per_sample;
 	state->lossless_mode = config->lossless_mode;
 	state->qhs_supported = config->qhs_supported;
+	/* The standalone container cannot sustain the Lossless candidate state:
+	 * measured, the R2.2 wrapper stalls (or faults) on the 44.1 kHz Lossless
+	 * path because the AudioReach feedback loop is not present.  Downgrade to
+	 * the ordinary R2 path unless the operator explicitly opts in. */
+	if (state->lossless_mode == APTX_ADAPTIVE_HELPER_LOSSLESS_FORCE &&
+			getenv("APTX_ADAPTIVE_ALLOW_UNSTABLE_LOSSLESS") == NULL) {
+		fprintf(stderr,
+			"aptx-adaptive-helper: Lossless was forced but the standalone "
+			"container cannot sustain it; downgrading to ordinary aptX "
+			"Adaptive.  Set APTX_ADAPTIVE_ALLOW_UNSTABLE_LOSSLESS=1 to "
+			"override (expect stalls or a crash).\n");
+		state->lossless_mode = APTX_ADAPTIVE_HELPER_LOSSLESS_OFF;
+	}
 	memcpy(state->r2_stream, config->r2_stream, sizeof(state->r2_stream));
+	/* Defence in depth: the host bridge already clears this bit when Lossless
+	 * is disabled, but a stale or forced stream must never make the R2.2
+	 * wrapper enter its Lossless candidate state.  With the bit set and
+	 * Lossless feedback absent the proprietary module either stalls or faults
+	 * on the 44.1 kHz path. */
+	if (state->lossless_mode == APTX_ADAPTIVE_HELPER_LOSSLESS_OFF)
+		state->r2_stream[1] &= (uint8_t)~0x80u;
 	state->lossless_eligible = false;
 	reset_module_storage(state);
 	prepare_init_properties(state, state->encoder_rate);
@@ -810,6 +840,32 @@ static int set_bitrate(struct helper_state *state, uint32_t bitrate)
 	return result == 0 ? 0 : -EIO;
 }
 
+/*
+ * The R3 kernel keeps a pair of per-channel cursors inside the module memory
+ * and advances them without wrapping.  A full AudioReach container consumes
+ * the module output and advances the read side; this standalone adapter cannot
+ * do that, so the cursors eventually run past the allocation and the kernel
+ * faults with SIGSEGV (measured at call ~94 with the 1 MiB module memory).
+ * Detect the condition and fail cleanly instead of letting the emulator die.
+ */
+#define R3_CURSOR_LIMIT_MARGIN (64u * 1024u)
+static bool r3_cursors_near_limit(const struct helper_state *state)
+{
+	const uintptr_t limit = (uintptr_t)state->module_memory +
+			MODULE_MEMORY_SIZE - R3_CURSOR_LIMIT_MARGIN;
+	const uint32_t *const cursors[] = {
+		(const uint32_t *)(state->module_memory + R3_INPUT_READ_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_INPUT_WRITE_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_RIGHT_READ_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_RIGHT_WRITE_CURSOR),
+	};
+
+	for (size_t i = 0; i < sizeof(cursors) / sizeof(cursors[0]); ++i)
+		if ((uintptr_t)*cursors[i] >= limit)
+			return true;
+	return false;
+}
+
 static int process_audio(struct helper_state *state, const uint8_t *pcm,
 		size_t pcm_size, uint8_t packet[MAX_PACKET_SIZE], size_t *packet_size)
 {
@@ -869,6 +925,14 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 	 * that case; only a genuine R2 kernel is SISO. */
 	if (!r3_kernel)
 		outputs[1] = NULL;
+	else if (r3_cursors_near_limit(state)) {
+		/* The proprietary R3 kernel would run past its own buffer here. */
+		fprintf(stderr,
+			"aptx-adaptive-helper: R3 cursor limit reached; refusing to "
+			"call the kernel (this build cannot advance the R3 consumer "
+			"side, see r3_cursors_near_limit())\n");
+		return -EOVERFLOW;
+	}
 
 	state->module->vtbl_ptr->process(state->module, inputs, outputs);
 	if (r3_kernel)
@@ -974,7 +1038,10 @@ int main(void)
 				.qhs_supported = false,
 			};
 			static const uint8_t default_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE] = {
-				1, 151, 0, 0, 15, 2, 3, 3, 3, 0, 170,
+				/* The default probe stream must not advertise the peer-only
+				 * R2.2 capability bit (0x80); claiming it makes the R2.2
+				 * wrapper wait for Lossless feedback that is never sent. */
+				1, 23, 0, 0, 15, 2, 3, 3, 3, 0, 170,
 			};
 			memcpy(default_config.r2_stream, default_stream,
 					sizeof(default_stream));
