@@ -98,6 +98,23 @@ extern capi_vtbl_t *get_aptx_adaptive3_vtable(void);
 typedef int (*set_bitrate_fn)(void *encoder, uint32_t bitrate);
 typedef int (*set_profile_fn)(void *encoder, int profile, int force);
 
+/* Direct R3 encoding pipeline.  The proprietary module calls
+ *     aptX3Encode(ctx, input_descriptor, output_descriptor)
+ * (see research/aptx-adaptive-qemu/gen-cntr-process-loop.md section 6).
+ * The descriptor is the five-field {base, start, end, limit, limit2} ring
+ * window; the encoder needs base <= start <= end <= limit <= limit2, a
+ * non-empty [start, end) input window of at least two frames, and an output
+ * window with limit - end > 11 and limit2 - limit > 63. */
+typedef int (*aptx3_encode_fn)(void *ctx, void *in_desc, void *out_desc);
+
+struct r3_desc {
+	uint32_t base;
+	uint32_t start;
+	uint32_t end;
+	uint32_t limit;
+	uint32_t limit2;
+};
+
 struct media_format_storage {
 	capi_set_get_media_format_t header;
 	capi_standard_data_format_v2_t format;
@@ -215,6 +232,18 @@ struct helper_state {
 
 	void *left_encoder;
 	void *right_encoder;
+
+	/* Direct R3 encoding pipeline (see gen-cntr-process-loop.md section 6). */
+	aptx3_encode_fn encode3;
+	struct r3_desc r3_in_l, r3_in_r, r3_out_l, r3_out_r;
+	int32_t *r3_ring_l;
+	int32_t *r3_ring_r;
+	uint32_t r3_ring_samples;
+	uint32_t r3_out_frame_bytes;
+	uint8_t r3_out_buf_l[4096];
+	uint8_t r3_out_buf_r[4096];
+	uint32_t r3_ttp;
+	bool r3_direct_ready;
 
 	capi_event_callback_info_t callback_info;
 	struct media_format_storage media_format;
@@ -424,6 +453,11 @@ static void reset_module_storage(struct helper_state *state)
 	state->right_encoder = NULL;
 	memset(&state->process_info, 0, sizeof(state->process_info));
 	memset(&state->out_port, 0, sizeof(state->out_port));
+	free(state->r3_ring_l);
+	free(state->r3_ring_r);
+	state->r3_ring_l = NULL;
+	state->r3_ring_r = NULL;
+	state->r3_direct_ready = false;
 }
 
 static void close_codec_libraries(struct helper_state *state)
@@ -502,6 +536,8 @@ static void resolve_codec_symbols(struct helper_state *state)
 				"aptX3Encode_SetBitRate");
 		state->set_profile = (set_profile_fn)dlsym(state->codec_library3,
 				"aptX3Encode_SetProfileMode");
+		state->encode3 = (aptx3_encode_fn)dlsym(state->codec_library3,
+				"aptX3Encode");
 	}
 }
 
@@ -852,6 +888,10 @@ static void query_port_thresholds(struct helper_state *state)
 			in_thr.threshold_in_bytes, out_thr.threshold_in_bytes);
 }
 
+static int r3_direct_setup(struct helper_state *state);
+static int process_audio_direct_r3(struct helper_state *state, const uint8_t *pcm,
+		size_t pcm_size, uint8_t packet[MAX_PACKET_SIZE], size_t *packet_size);
+
 static int initialize_mode(struct helper_state *state,
 		const struct helper_config *config,
 		enum aptx_adaptive_helper_mode mode)
@@ -879,6 +919,7 @@ static int initialize_mode(struct helper_state *state,
 	 * path because the AudioReach feedback loop is not present.  Downgrade to
 	 * the ordinary R2 path unless the operator explicitly opts in. */
 	if (state->lossless_mode == APTX_ADAPTIVE_HELPER_LOSSLESS_FORCE &&
+			state->mode != APTX_ADAPTIVE_HELPER_MODE_R3 &&
 			getenv("APTX_ADAPTIVE_ALLOW_UNSTABLE_LOSSLESS") == NULL) {
 		fprintf(stderr,
 			"aptx-adaptive-helper: Lossless was forced but the standalone "
@@ -954,13 +995,134 @@ static int initialize_mode(struct helper_state *state,
 		return -EIO;
 	if (state->abr_enabled && send_imcl_quality_level(state, 5) < 0)
 		return -EIO;
+	if (r3_direct_setup(state) < 0)
+		return -ENOMEM;
+	return 0;
+}
+
+static int r3_direct_setup(struct helper_state *state)
+{
+	const uint32_t ring_samples = 16384;
+	uint32_t b;
+
+	if (state->mode != APTX_ADAPTIVE_HELPER_MODE_R3 || state->encode3 == NULL)
+		return 0;
+
+	state->r3_ring_l = calloc(ring_samples, sizeof(int32_t));
+	state->r3_ring_r = calloc(ring_samples, sizeof(int32_t));
+	if (state->r3_ring_l == NULL || state->r3_ring_r == NULL)
+		return -ENOMEM;
+	state->r3_ring_samples = ring_samples;
+	state->r3_out_frame_bytes = 328;
+	state->r3_ttp = 0x4e2; /* same base the module uses */
+
+	b = (uint32_t)(uintptr_t)state->r3_ring_l;
+	state->r3_in_l.base = b; state->r3_in_l.start = b; state->r3_in_l.end = b;
+	state->r3_in_l.limit = b + ring_samples * 4;
+	state->r3_in_l.limit2 = state->r3_in_l.limit;
+	b = (uint32_t)(uintptr_t)state->r3_ring_r;
+	state->r3_in_r.base = b; state->r3_in_r.start = b; state->r3_in_r.end = b;
+	state->r3_in_r.limit = b + ring_samples * 4;
+	state->r3_in_r.limit2 = state->r3_in_r.limit;
+
+	b = (uint32_t)(uintptr_t)state->r3_out_buf_l;
+	state->r3_out_l.base = b; state->r3_out_l.start = b; state->r3_out_l.end = b;
+	state->r3_out_l.limit = b + state->r3_out_frame_bytes;
+	state->r3_out_l.limit2 = state->r3_out_l.limit + 64;
+	b = (uint32_t)(uintptr_t)state->r3_out_buf_r;
+	state->r3_out_r.base = b; state->r3_out_r.start = b; state->r3_out_r.end = b;
+	state->r3_out_r.limit = b + state->r3_out_frame_bytes;
+	state->r3_out_r.limit2 = state->r3_out_r.limit + 64;
+
+	state->r3_direct_ready = true;
+	if (helper_verbose())
+		fprintf(stderr, "aptx-adaptive-helper: R3 direct pipeline ready "
+			"(ring %u samples, frame %u bytes)\n",
+			ring_samples, state->r3_out_frame_bytes);
+	return 0;
+}
+
+/* Direct R3 encoding pipeline: drive aptX3Encode() with the argument
+ * convention the proprietary module uses (ctx, input descriptor, output
+ * descriptor).  Returns 0 with one complete OTA packet, -EAGAIN while fewer
+ * than two frames are buffered. */
+static int process_audio_direct_r3(struct helper_state *state, const uint8_t *pcm,
+		size_t pcm_size, uint8_t packet[MAX_PACKET_SIZE], size_t *packet_size)
+{
+	const int32_t *src = (const int32_t *)pcm;
+	uint32_t frames = (uint32_t)(pcm_size / 8); /* stereo S32 */
+	uint32_t l_used = (state->r3_in_l.end - state->r3_in_l.base) / 4;
+	uint32_t r_used = (state->r3_in_r.end - state->r3_in_r.base) / 4;
+	int res_l, res_r;
+	uint32_t produced, ttp;
+
+	if (l_used + frames > state->r3_ring_samples)
+		return -ENOSPC;
+	for (uint32_t i = 0; i < frames; ++i) {
+		/* The module stores the CAPI input shifted right by 8 in its own
+		 * ring, so the encoder expects the same Q19-ish scale. */
+		state->r3_ring_l[l_used + i] = src[2 * i] >> 8;
+		state->r3_ring_r[r_used + i] = src[2 * i + 1] >> 8;
+	}
+	state->r3_in_l.end += frames * 4;
+	state->r3_in_r.end += frames * 4;
+
+	/* The encoder needs at least two frames in the window (measured: one
+	 * frame returns 0xF015 and writes a single byte). */
+	if ((state->r3_in_l.end - state->r3_in_l.start) / 4 < 2 * frames)
+		return -EAGAIN;
+
+	state->r3_out_l.start = state->r3_out_l.end = state->r3_out_l.base;
+	state->r3_out_r.start = state->r3_out_r.end = state->r3_out_r.base;
+	res_l = state->encode3(state->left_encoder, &state->r3_in_l, &state->r3_out_l);
+	res_r = state->encode3(state->right_encoder, &state->r3_in_r, &state->r3_out_r);
+	if (res_l != 0 || res_r != 0)
+		return -EIO;
+
+	produced = state->r3_out_l.end - state->r3_out_l.base;
+	if (produced == 0 || produced > state->r3_out_frame_bytes)
+		produced = state->r3_out_frame_bytes;
+
+	ttp = state->r3_ttp;
+	packet[0] = ttp & 0xff;
+	packet[1] = (ttp >> 8) & 0xff;
+	packet[2] = (uint8_t)(*(uint8_t *)(state->module_memory + 0x248) << 2);
+	packet[3] = *(uint8_t *)(state->module_memory + 0x230);
+	packet[4] = 0;
+	packet[5] = 0;
+	packet[6] = 0;
+	packet[7] = *(uint8_t *)(state->module_memory + 0x231);
+	if (packet[3] == 0)
+		packet[3] = 1;
+	if (packet[7] == 0)
+		packet[7] = 0xad; /* R3 */
+	memcpy(packet + 8, state->r3_out_buf_l, produced);
+	memcpy(packet + 8 + produced, state->r3_out_buf_r, produced);
+	*packet_size = 8 + 2 * produced;
+	state->r3_ttp = ttp + 375; /* same step the R2 path uses per frame */
+
+	/* Advance the window and compact when the consumed prefix gets large. */
+	state->r3_in_l.start += frames * 4;
+	state->r3_in_r.start += frames * 4;
+	if (state->r3_in_l.start - state->r3_in_l.base > state->r3_ring_samples * 2) {
+		uint32_t left = state->r3_in_l.end - state->r3_in_l.start;
+		memmove(state->r3_ring_l,
+			(uint8_t *)(uintptr_t)state->r3_in_l.start, left);
+		state->r3_in_l.start = state->r3_in_l.base;
+		state->r3_in_l.end = state->r3_in_l.base + left;
+		left = state->r3_in_r.end - state->r3_in_r.start;
+		memmove(state->r3_ring_r,
+			(uint8_t *)(uintptr_t)state->r3_in_r.start, left);
+		state->r3_in_r.start = state->r3_in_r.base;
+		state->r3_in_r.end = state->r3_in_r.base + left;
+	}
 	return 0;
 }
 
 static int configure(struct helper_state *state,
 		const struct helper_config *config)
 {
-		enum aptx_adaptive_helper_mode requested =
+	enum aptx_adaptive_helper_mode requested =
 			(enum aptx_adaptive_helper_mode)config->mode;
 	if (requested != APTX_ADAPTIVE_HELPER_MODE_AUTO &&
 		requested != APTX_ADAPTIVE_HELPER_MODE_R2 &&
@@ -1065,6 +1227,10 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 	if (!state->initialized || pcm == NULL || packet_size == NULL ||
 			pcm_size == 0 || pcm_size > PCM_BYTES_MAX)
 		return -EINVAL;
+
+	if (state->r3_direct_ready)
+		return process_audio_direct_r3(state, pcm, pcm_size, packet,
+				packet_size);
 
 	capi_buf_t input_buffer = {
 		.data_ptr = (int8_t *)pcm,

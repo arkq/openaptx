@@ -320,3 +320,30 @@ DESC outC 411afbcc 411afbcc 411afbcc 411afc64 411b0000
 3. 每帧调用 `aptX3Encode(ctx, &in_desc, &out_desc)`（输出描述符每次重置 `start=end=base`）
 4. 从输出缓冲取 328 字节作为该声道 payload
 5. 按模块字段构 OTA 头（`me+0x230` 类型、`me+0x231` 版本、`me+0x248` 周期、`me+0x21c` 大小、`me+0x268` 时间戳）
+
+---
+
+## 7. 直接编码管线已接入 helper（2026-09-08）
+
+`aptx-lossless-helper.c` 新增：
+
+| 项 | 实现 |
+|---|---|
+| `aptx3_encode_fn` / `struct r3_desc` | 五字段描述符与 `aptX3Encode(ctx, in, out)` 签名 |
+| `resolve_codec_symbols()` | 追加 `dlsym(..., "aptX3Encode")` |
+| `r3_direct_setup()` | R3 模式下调用于 `initialize_mode()` 末尾；分配左右各 16384 样本的环、设置输入描述符（`limit == limit2`）与输出描述符（`limit = base+328`、`limit2 = limit+64`） |
+| `process_audio_direct_r3()` | 把交织 S32 去交织并 `>>8`（与模块内部缩放一致）写入环；窗口 < 2 帧返回 `-EAGAIN`；调用 `aptX3Encode`；构 OTA 头（TTP 自增 375、`me+0x248<<2` 周期、`me+0x230` 类型、`me+0x231` 版本）；payload = 左右各 328 字节；消费后推进 `start` 并在过半时压缩 |
+| `reset_module_storage()` | 释放环 |
+
+**实测结果（48 kHz，R3 模式）**：
+
+```
+packets=40  distinct_payloads=40          ← 全部随输入变化
+ota = e2 04 3c 01 00 00 00 ad             ← TTP / 周期 / 类型 / 版本(R3)
+payload nz = 652 / 600 / 486 (共 656)     ← 稠密比特流
+TTP: 0x04e2 -> 0x0659 -> 0x07d0 (Δ=375)   ← 正确递增
+```
+
+R2 路径完全无退化：168/182 包，version 0xae/0xaf，全部 PASS。
+
+**至此 aptX Adaptive 与 aptX Lossless（R3）在本机均已跑通真实码流。**
