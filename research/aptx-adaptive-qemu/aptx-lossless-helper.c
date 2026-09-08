@@ -1143,8 +1143,52 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 		state->process_info.anything_changed = false;
 		output_buffers[0].actual_data_len = 0;
 
+		if (getenv("APTX_DUMP_IN")) {
+			const int32_t *s32 = (const int32_t *)pcm;
+			fprintf(stderr, "IN[0..7] = %d %d %d %d %d %d %d %d\n",
+				s32[0], s32[1], s32[2], s32[3], s32[4], s32[5], s32[6], s32[7]);
+		}
 		state->module->vtbl_ptr->process(state->module, inputs, outputs);
-		if (r3_kernel)
+		if (getenv("APTX_DUMP_RING")) {
+			uint32_t lbase = *(uint32_t *)(state->module_memory + R3_LEFT_BASE_CURSOR);
+			uint32_t lstart = *(uint32_t *)(state->module_memory + R3_LEFT_DATA_CURSOR);
+			uint32_t lend = *(uint32_t *)(state->module_memory + R3_LEFT_END_CURSOR);
+			uint32_t rbase = *(uint32_t *)(state->module_memory + R3_RIGHT_BASE_CURSOR);
+			uint32_t rstart = *(uint32_t *)(state->module_memory + R3_RIGHT_DATA_CURSOR);
+			uint32_t rend = *(uint32_t *)(state->module_memory + R3_RIGHT_END_CURSOR);
+			fprintf(stderr, "RING L base=%08x start=%08x end=%08x | R base=%08x start=%08x end=%08x\n",
+				lbase, lstart, lend, rbase, rstart, rend);
+			{
+				const uint32_t *d = (const uint32_t *)(state->module_memory + 0x6414);
+				fprintf(stderr, "  DESC inL  %08x %08x %08x %08x %08x\n",
+					d[0], d[1], d[2], d[3], d[4]);
+				d = (const uint32_t *)(state->module_memory + 0x6428);
+				fprintf(stderr, "  DESC inR  %08x %08x %08x %08x %08x\n",
+					d[0], d[1], d[2], d[3], d[4]);
+				d = (const uint32_t *)(state->module_memory + 0x643c);
+				fprintf(stderr, "  DESC outA %08x %08x %08x %08x %08x\n",
+					d[0], d[1], d[2], d[3], d[4]);
+				d = (const uint32_t *)(state->module_memory + 0x6450);
+				fprintf(stderr, "  DESC outB %08x %08x %08x %08x %08x\n",
+					d[0], d[1], d[2], d[3], d[4]);
+				d = (const uint32_t *)(state->module_memory + 0x6464);
+				fprintf(stderr, "  DESC outC %08x %08x %08x %08x %08x\n",
+					d[0], d[1], d[2], d[3], d[4]);
+			}
+			if (!lbase || !rbase) { fprintf(stderr, "  (ring descriptors null)\n"); goto after_ring_dump; }
+			const int32_t *lr = (const int32_t *)(uintptr_t)lbase;
+			const int32_t *rr = (const int32_t *)(uintptr_t)rbase;
+			fprintf(stderr, "  L[0..7]=%d %d %d %d %d %d %d %d  R[0..7]=%d %d %d %d %d %d %d %d\n",
+				lr[0], lr[1], lr[2], lr[3], lr[4], lr[5], lr[6], lr[7],
+				rr[0], rr[1], rr[2], rr[3], rr[4], rr[5], rr[6], rr[7]);
+			uint32_t loff = (lend - lbase) / 4, roff = (rend - rbase) / 4;
+			if (loff > 8) fprintf(stderr, "  L[%u..%u]=%d %d %d %d %d %d %d %d\n", loff-8, loff-1,
+				lr[loff-8], lr[loff-7], lr[loff-6], lr[loff-5], lr[loff-4], lr[loff-3], lr[loff-2], lr[loff-1]);
+			if (roff > 8) fprintf(stderr, "  R[%u..%u]=%d %d %d %d %d %d %d %d\n", roff-8, roff-1,
+				rr[roff-8], rr[roff-7], rr[roff-6], rr[roff-5], rr[roff-4], rr[roff-3], rr[roff-2], rr[roff-1]);
+		}
+	after_ring_dump:;
+		if (r3_kernel && !getenv("APTX_NO_RESET_CURSORS"))
 			reset_r3_input_cursors(state);
 
 		size_t frame_bytes = output_buffers[0].actual_data_len;

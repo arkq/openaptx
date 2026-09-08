@@ -246,3 +246,77 @@ R3 48k：300 包、unique=3（stub 未变，与容器迁移无关）
 ```
 
 二进制：12816 字节（原 12336）。备份：`/tmp/aptx-lossless-helper.pre-cntr`。
+
+---
+
+## 6. 决定性突破：`aptX3Encode` 的真实调用约定（2026-09-08）
+
+### 6.1 从模块反汇编得到的调用点
+
+`aptx_adaptive3_enc_process` 的右声道路径（`deferred_rhs_process` @0x9a20）：
+
+```
+9b98: r2 = memw(r16+0x8); r3 = memw(r16+0x4)   ; end, start
+9b9c: r2 = sub(r2,r3)                          ; end - start
+9ba0: if (!cmp.gt(r2,0)) jump 0x9c14           ; 窗口非空才调用
+9ba4: r1 = r16                                 ; arg1 = 输入描述符
+9ba8: r2 = memw(r16+0x34); r3 = memw(r16+0x30) ; 输出描述符 end/limit
+9bac: r2 = sub(r2,r3)
+9bb0: if (!cmp.gt(r2,0)) jump 0x9c14
+9bb4: r2 = add(r17,#0x6450)                    ; arg2 = 输出描述符
+9bb8: r3 = memw(r19+#0x10c)                    ; 函数指针
+9bbc: r0 = memw(r17+#0xc8)                     ; arg0 = 编码器 ctx
+9bc0: callr r3
+```
+
+即：**`aptX3Encode(ctx, 输入描述符, 输出描述符)`**
+
+### 6.2 之前探针的错误
+
+旧探针写的是 `encode(ctx, 0, &ring)`——把 ring 当成**输出**描述符、输入传 NULL。
+这正是"4 字节 stub"的直接原因。
+
+### 6.3 正确用法下的结果
+
+`direct-probe2.c` 用正确约定驱动，**每次调用都返回 0 并产出真实码流**：
+
+| 条件 | 结果 |
+|---|---|
+| 输入窗口 ≥ 1344 样本（2 帧） | 成功 |
+| 输入窗口 = 672 样本（1 帧） | 0xF015，只写 1 字节 |
+| 输出描述符 `limit2 - limit > 63` | 必须满足，否则 0xF014 |
+| 输出描述符 `limit - end > 11` | 必须满足，否则 0xF016 |
+| 输出缓冲 328 字节（与模块一致） | **产出 328 字节，325/327/291 非零** |
+| 输出缓冲 64 KB | 产出 696~707 非零字节 |
+
+输出随输入变化（同一位置）：
+
+```
+sine : 81 cc d0 7f fc 0f ff d1 8c 01 0e 7d fe f4 32 93 b5 ...
+noise: 81 cc d0 7f c8 05 e0 08 4b 5f 13 83 a8 1f a4 1f e2 0f ...
+```
+
+**结论：aptX Adaptive R3 / Lossless 编码器本身完全正常，之前的所有"空帧"都是调用约定错误造成的。**
+
+### 6.4 模块内部描述符（helper 运行时实测）
+
+```
+DESC inL  411aa29c 411aa29c 411aad1c 411b229c 411b229c   ← 输入环（32768 字节）
+DESC inR  411b229c 411b229c 411b2d1c 411ba29c 411ba29c
+DESC outA 411ae43c 411ae43c 411ae43c 411ae584 411ae5c4   ← limit=+0x148, limit2=+0x188
+DESC outB 411ae5c4 411ae5c4 411ae5c4 411ae70c 411ae74c   ← 模块实际传给编码器的
+DESC outC 411afbcc 411afbcc 411afbcc 411afc64 411b0000
+```
+
+描述符本身**完全合法**（`limit-end=0x148>11`，`limit2-limit=0x40>63`），输入窗口也随调用增长
+（2688→5376→8064→10752 字节）。因此模块侧仍有别的因素导致 stub，但**正确管线已被证明可用**。
+
+### 6.5 下一步
+
+在 helper 中实现直接编码管线：
+
+1. 让模块完成一次 process（触发 `init_output_bufs`，建立 ctx 与输出缓冲）
+2. helper 自管输入环，累积到 ≥1344 样本
+3. 每帧调用 `aptX3Encode(ctx, &in_desc, &out_desc)`（输出描述符每次重置 `start=end=base`）
+4. 从输出缓冲取 328 字节作为该声道 payload
+5. 按模块字段构 OTA 头（`me+0x230` 类型、`me+0x231` 版本、`me+0x248` 周期、`me+0x21c` 大小、`me+0x268` 时间戳）
