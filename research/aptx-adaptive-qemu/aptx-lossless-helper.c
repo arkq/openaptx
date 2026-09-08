@@ -56,10 +56,28 @@
 /* The R3 wrapper uses an internal two-channel ring.  A normal AudioReach
  * container advances these cursors after handing the output to its next
  * module; this standalone helper has no such container. */
-#define R3_INPUT_READ_CURSOR 0x6418u
-#define R3_INPUT_WRITE_CURSOR 0x641cu
-#define R3_RIGHT_READ_CURSOR 0x6428u
-#define R3_RIGHT_WRITE_CURSOR 0x6430u
+/* The R3 wrapper uses an internal two-channel ring.  Each channel has a
+ * five-field descriptor: {base, data_start, data_end, limit, limit2} with the
+ * invariant base <= data_start <= data_end <= limit <= limit2.  The module
+ * compacts the window [data_start, data_end) back to base itself; the adapter
+ * must only mark the window empty after taking a packet, never move the base.
+ *
+ * Left  descriptor at 0x6414: base=0x6414, start=0x6418, end=0x641c
+ * Right descriptor at 0x6428: base=0x6428, start=0x642c, end=0x6430
+ *
+ * An earlier version of this adapter used 0x6428 as the "right read cursor"
+ * and set it to the write cursor.  That moved the ring base forward by one
+ * frame per call and made the kernel stall once the base reached the limit. */
+#define R3_LEFT_BASE_CURSOR 0x6414u
+#define R3_LEFT_DATA_CURSOR 0x6418u
+#define R3_LEFT_END_CURSOR 0x641cu
+#define R3_RIGHT_BASE_CURSOR 0x6428u
+#define R3_RIGHT_DATA_CURSOR 0x642cu
+#define R3_RIGHT_END_CURSOR 0x6430u
+#define R3_INPUT_READ_CURSOR R3_LEFT_DATA_CURSOR
+#define R3_INPUT_WRITE_CURSOR R3_LEFT_END_CURSOR
+#define R3_RIGHT_READ_CURSOR R3_RIGHT_DATA_CURSOR
+#define R3_RIGHT_WRITE_CURSOR R3_RIGHT_END_CURSOR
 
 /* The generic metadata bridge is stored immediately before the R3 loader
  * table.  The standalone R3 vtable does not copy this extension itself. */
@@ -923,10 +941,13 @@ static int configure(struct helper_state *state,
 
 static void reset_r3_input_cursors(struct helper_state *state)
 {
-	*(uint32_t *)(state->module_memory + R3_INPUT_READ_CURSOR) =
-			*(uint32_t *)(state->module_memory + R3_INPUT_WRITE_CURSOR);
-	*(uint32_t *)(state->module_memory + R3_RIGHT_READ_CURSOR) =
-			*(uint32_t *)(state->module_memory + R3_RIGHT_WRITE_CURSOR);
+	/* Mark both channel windows empty (start = end).  The module performs its
+	 * own compaction back to the base on the next process call; moving the
+	 * base (0x6414 / 0x6428) here would make it walk forward and stall. */
+	*(uint32_t *)(state->module_memory + R3_LEFT_DATA_CURSOR) =
+			*(uint32_t *)(state->module_memory + R3_LEFT_END_CURSOR);
+	*(uint32_t *)(state->module_memory + R3_RIGHT_DATA_CURSOR) =
+			*(uint32_t *)(state->module_memory + R3_RIGHT_END_CURSOR);
 }
 
 static int set_quality_level(struct helper_state *state, uint32_t quality_level)
@@ -985,10 +1006,12 @@ static bool r3_cursors_near_limit(const struct helper_state *state)
 	const uintptr_t limit = (uintptr_t)state->module_memory +
 			MODULE_MEMORY_SIZE - R3_CURSOR_LIMIT_MARGIN;
 	const uint32_t *const cursors[] = {
-		(const uint32_t *)(state->module_memory + R3_INPUT_READ_CURSOR),
-		(const uint32_t *)(state->module_memory + R3_INPUT_WRITE_CURSOR),
-		(const uint32_t *)(state->module_memory + R3_RIGHT_READ_CURSOR),
-		(const uint32_t *)(state->module_memory + R3_RIGHT_WRITE_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_LEFT_BASE_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_LEFT_DATA_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_LEFT_END_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_RIGHT_BASE_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_RIGHT_DATA_CURSOR),
+		(const uint32_t *)(state->module_memory + R3_RIGHT_END_CURSOR),
 	};
 
 	for (size_t i = 0; i < sizeof(cursors) / sizeof(cursors[0]); ++i)
