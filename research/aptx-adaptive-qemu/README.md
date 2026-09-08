@@ -117,32 +117,48 @@ framework extensions   = 1 (FWK_EXTN_BT_CODEC 0x000132e4)
 Set `APTX_ADAPTIVE_VERBOSE=1` to print these and the events the module raises
 during initialization (`DISABLE_PREBUFFER=1`, `KPPS_SCALE_FACTOR=0x40`).
 
-### R3 cursor investigation (open)
+### R3 cursor semantics (solved)
 
-The R3 kernel keeps four pointers at fixed offsets in the module memory
-(`0x6418`, `0x641c`, `0x6428`, `0x6430`).  Measured on the CPH2749 build with
-the 44.1 kHz Lossless-candidate configuration:
+The R3 kernel keeps a five-field descriptor per channel inside the module
+memory, with the invariant `base <= data_start <= data_end <= limit <= limit2`:
 
-- The left pair (`0x6418`/`0x641c`) stays constant.
-- The right pair advances: `0x6430` grows by one 672-sample S32 channel
-  (2688 bytes) per call, and `0x6428` is set to the previous `0x6430` value by
-  the adapter after each call.
-- `0x6420` holds the region start (33404) and `0x6434` the region end (66172),
-  i.e. a 32 KiB region at the start of the module memory.
-- After ~12 calls the right pointer reaches `0x6434` and the encoder stops
-  producing packets even though it still consumes every input sample.
-- Wrapping the pointer back to the region start, or resetting both right
-  pointers to their post-init values, either crashes the kernel or freezes the
-  output (only three distinct payloads, constant TTP).
-- The crash point scales with the module memory allocation (1 MiB -> call 94,
-  4 MiB -> call 364), which means the kernel keeps advancing the pointer past
-  the 32 KiB region instead of wrapping it.
+| channel | base | data_start | data_end | limit | limit2 |
+| --- | --- | --- | --- | --- | --- |
+| left | `0x6414` | `0x6418` | `0x641c` | `0x6420` | `0x6424` |
+| right | `0x6428` | `0x642c` | `0x6430` | `0x6434` | `0x6438` |
 
-Until the consumer-side advance that the real AudioReach container performs is
-understood, the adapter refuses to call the kernel once a cursor approaches the
-allocation end (returns `EOVERFLOW` instead of letting the emulator die with
-SIGSEGV).  The ordinary R2 path does not use these cursors at all and is
-unaffected.
+`aptx_adaptive3_enc_process()` compacts the window `[data_start, data_end)` back
+to `base` itself when it needs room (disassembly at `0xd1b0` for the left
+channel and `0xd200` for the right one).  The adapter must therefore only mark
+the window empty after taking a packet:
+
+```c
+0x6418 = 0x641c;   /* left  start = end  */
+0x642c = 0x6430;   /* right start = end  */
+```
+
+An earlier version of this adapter treated `0x6428` as the right read cursor and
+set it to `0x6430`.  Because `0x6428` is the ring **base**, that moved the base
+forward by one frame per call; after ~12 calls the base reached the limit
+(`0x6434`, a 32 KiB region) and the kernel stopped producing output.  Removing
+the bogus advance (or correcting it as above) unblocks the stream:
+
+| configuration | before | after |
+| --- | --- | --- |
+| R3 @48 kHz | SIGSEGV / `EOVERFLOW` after 89 calls | 2000 packets in 2000 calls |
+| R2.2 Lossless @44.1 kHz | stalls after 7 packets | 1945 packets in 2000 calls |
+| R2 lossy @48/96 kHz | unchanged (224 packets) | unchanged |
+
+Open issue: the R3/Lossless kernel now runs continuously but its output settles
+into a small set of repeated frames (3 distinct payloads at 48 kHz, 5 at
+44.1 kHz) instead of tracking the input.  The ordinary R2 path produces one
+unique payload per packet.  Note that the reference stream saved by the
+earlier standalone R3 probe (`capi3-stream.aptx3`) shows the same behaviour
+(3 distinct payloads out of 6), so this is not a regression introduced by the
+cursor fix; it points at a missing container-side mechanism in the R3 path.
+
+The `EOVERFLOW` guard is kept as a safety net in case a cursor ever approaches
+the allocation end again.
 
 
 Place the user-supplied `aptx_adaptive_enc_module.so.1`,
