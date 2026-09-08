@@ -167,6 +167,30 @@ struct helper_config {
 	uint8_t r2_stream[APTX_ADAPTIVE_HELPER_R2_STREAM_SIZE];
 };
 
+/* Container-side state, modelled on the open-source AudioReach gen_cntr
+ * (BSD-3-Clause, fwk/spf/containers/gen_cntr).  The reference container loops
+ * gen_cntr_data_process_one_frame() until the external output buffer holds
+ * max_frames_per_buffer frames, retrying when the module raises a media
+ * format / threshold / process-state event and stopping when nothing changed.
+ * This helper previously did exactly one module->process() call per request. */
+struct cntr_process_info {
+	bool anything_changed;
+	bool port_thresh_event;
+	uint32_t num_data_tpm_done;
+};
+
+struct cntr_port_state {
+	size_t   buf_max_size;
+	size_t   actual_data_len;
+	uint32_t max_frames_per_buffer;
+	uint32_t num_frames_in_buf;
+	bool     release_ext_out_buf;
+	bool     is_prebuffer_sent;
+	/* BT codec framework extension (CAPI_BT_CODEC_EXTN_EVENT_ID_*) */
+	bool     disable_one_time_pre_buf;
+	uint32_t kpps_scale_factor_q4;
+};
+
 struct helper_state {
 	uint8_t *module_memory;
 	capi_t *module;
@@ -198,6 +222,10 @@ struct helper_state {
 	capi_proplist_t init;
 	intf_extn_param_id_metadata_handler_t metadata_handler;
 	bool initialized;
+
+	/* Container-side data-path state (see gen-cntr-process-loop.md). */
+	struct cntr_process_info process_info;
+	struct cntr_port_state out_port;
 };
 
 static bool helper_verbose(void)
@@ -208,31 +236,40 @@ static bool helper_verbose(void)
 static capi_err_t event_callback(void *context, capi_event_id_t id,
 		capi_event_info_t *event)
 {
-	(void)context;
+	struct helper_state *state = (struct helper_state *)context;
+	(void)id;
 	/* A real AudioReach container acts on these events.  The standalone
-	 * adapter only reports them so an operator can see what the module asks
-	 * for.  The important one is FWK_EXTN_BT_CODEC /
-	 * CAPI_BT_CODEC_EXTN_EVENT_ID_DISABLE_PREBUFFER (0x000132e5), which tells
-	 * the container to disable its one-time pre-buffering. */
-	if (helper_verbose() && id == CAPI_EVENT_DATA_TO_DSP_SERVICE && event != NULL &&
-			event->payload.data_ptr != NULL &&
+	 * adapter records the BT codec framework-extension state so the process
+	 * loop can honour it, and reports the events when verbose. */
+	if (event != NULL && event->payload.data_ptr != NULL &&
 			event->payload.actual_data_len >= sizeof(capi_event_data_to_dsp_service_t)) {
 		const capi_event_data_to_dsp_service_t *d =
 			(const capi_event_data_to_dsp_service_t *)event->payload.data_ptr;
 		if (d->param_id == 0x000132e5 &&
-				d->payload.actual_data_len >= sizeof(uint32_t))
-			fprintf(stderr, "aptx-adaptive-helper: module event "
-				"DISABLE_PREBUFFER=%u\n",
-				(unsigned)*(const uint32_t *)d->payload.data_ptr);
-		else if (d->param_id == 0x000132e7 &&
-				d->payload.actual_data_len >= sizeof(uint32_t))
-			fprintf(stderr, "aptx-adaptive-helper: module event "
-				"KPPS_SCALE_FACTOR=0x%x\n",
-				(unsigned)*(const uint32_t *)d->payload.data_ptr);
-		else
+				d->payload.actual_data_len >= sizeof(uint32_t)) {
+			/* CAPI_BT_CODEC_EXTN_EVENT_ID_DISABLE_PREBUFFER */
+			uint32_t value = *(const uint32_t *)d->payload.data_ptr;
+			if (state != NULL) {
+				state->out_port.disable_one_time_pre_buf = (value > 0);
+				state->out_port.is_prebuffer_sent = (value > 0);
+			}
+			if (helper_verbose())
+				fprintf(stderr, "aptx-adaptive-helper: module event "
+					"DISABLE_PREBUFFER=%u\n", (unsigned)value);
+		} else if (d->param_id == 0x000132e7 &&
+				d->payload.actual_data_len >= sizeof(uint32_t)) {
+			/* CAPI_BT_CODEC_EXTN_EVENT_ID_KPPS_SCALE_FACTOR (q4, 1.0=0x10) */
+			uint32_t value = *(const uint32_t *)d->payload.data_ptr;
+			if (state != NULL && value >= 0x10)
+				state->out_port.kpps_scale_factor_q4 = value;
+			if (helper_verbose())
+				fprintf(stderr, "aptx-adaptive-helper: module event "
+					"KPPS_SCALE_FACTOR=0x%x\n", (unsigned)value);
+		} else if (helper_verbose()) {
 			fprintf(stderr, "aptx-adaptive-helper: module event "
 				"param_id=0x%08x len=%u\n",
 				d->param_id, (unsigned)d->payload.actual_data_len);
+		}
 	}
 	return CAPI_EOK;
 }
@@ -385,6 +422,8 @@ static void reset_module_storage(struct helper_state *state)
 	state->initialized = false;
 	state->left_encoder = NULL;
 	state->right_encoder = NULL;
+	memset(&state->process_info, 0, sizeof(state->process_info));
+	memset(&state->out_port, 0, sizeof(state->out_port));
 }
 
 static void close_codec_libraries(struct helper_state *state)
@@ -1088,16 +1127,63 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 		return -EOVERFLOW;
 	}
 
-	state->module->vtbl_ptr->process(state->module, inputs, outputs);
-	if (r3_kernel)
-		reset_r3_input_cursors(state);
+	/* gen_cntr_data_process_frames(): process until the external output
+	 * buffer holds a complete frame, retrying while the module reports that
+	 * something changed (media format / port threshold / process state). */
+	state->process_info.anything_changed = false;
+	state->process_info.port_thresh_event = false;
+	state->process_info.num_data_tpm_done = 0;
+	state->out_port.release_ext_out_buf = false;
+	state->out_port.buf_max_size = MAX_PACKET_SIZE;
+	if (state->out_port.max_frames_per_buffer == 0)
+		state->out_port.max_frames_per_buffer = 1;
 
-	size_t produced = output_buffers[0].actual_data_len;
+	uint32_t inner_loop_count = 0;
+	for (;;) {
+		state->process_info.anything_changed = false;
+		output_buffers[0].actual_data_len = 0;
+
+		state->module->vtbl_ptr->process(state->module, inputs, outputs);
+		if (r3_kernel)
+			reset_r3_input_cursors(state);
+
+		size_t frame_bytes = output_buffers[0].actual_data_len;
+		if (frame_bytes > 0) {
+			if (frame_bytes > MAX_PACKET_SIZE)
+				return -EIO;
+			state->out_port.actual_data_len = frame_bytes;
+			state->out_port.num_frames_in_buf++;
+			state->process_info.anything_changed = true;
+			state->process_info.num_data_tpm_done++;
+		}
+
+		inner_loop_count++;
+
+		/* gen_cntr_need_to_process_frames() */
+		if (state->out_port.num_frames_in_buf >=
+				state->out_port.max_frames_per_buffer &&
+				state->out_port.actual_data_len > 0) {
+			state->out_port.release_ext_out_buf = true;
+			break;
+		}
+		if (state->process_info.port_thresh_event) {
+			/* re-run the modules before reading more input */
+			state->process_info.port_thresh_event = false;
+			continue;
+		}
+		if (!state->process_info.anything_changed)
+			break;			/* module is still buffering a frame */
+		if (inner_loop_count > 1000)
+			break;			/* runaway guard, mirrors gen_cntr */
+	}
+
+	size_t produced = state->out_port.actual_data_len;
 	if (produced == 0 || produced > MAX_PACKET_SIZE) {
 		/* The extracted wrapper reports CAPI_EFAILED while it is buffering a
 		 * complete frame (and may also report it after metadata propagation),
 		 * so an empty output is the only reliable indication that the host
 		 * should continue feeding audio. */
+		state->out_port.num_frames_in_buf = 0;
 		return produced == 0 ? -EAGAIN : -EIO;
 	}
 
@@ -1109,6 +1195,8 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 		return -EBADMSG;
 
 	*packet_size = produced;
+	state->out_port.actual_data_len = 0;
+	state->out_port.num_frames_in_buf = 0;
 	return 0;
 }
 
