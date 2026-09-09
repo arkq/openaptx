@@ -39,12 +39,12 @@ What is not solved: why the sink rejects an otherwise byte-identical stream.
 | --- | --- |
 | Host | Intel Core Ultra 7 255HX, 30 GiB DDR5 |
 | OS | NixOS 26.11pre, linux-zen 7.2.3 |
-| Bluetooth adapter | Intel AX210 (`FC:B3:AA:C5:01:42`), kernel `btusb` — no Qualcomm controller |
-| Sink | Sennheiser MOMENTUM 5 (`80:C3:BA:B7:16:3B`), A2DP SEP 9, vendor `0x00d7`, codec `0x00ad` |
-| Reference source 1 | HONOR 90GT / Android 16 (`44:90:46:40:FD:DD`) — aptX Adaptive works |
+| Adapter | Intel AX210 (`FC:B3:AA:C5:01:42`), `btusb`; no Qualcomm |
+| Sink | Sennheiser MOMENTUM 5 (`80:C3:BA:B7:16:3B`), SEP 9, vendor `0x00d7` |
+| Reference source 1 | HONOR 90GT / Android 16 (`44:90:46:40:FD:DD`) |
 | Reference source 2 | FiiO BT11 / QCC5181 — aptX Adaptive/Lossless works |
-| Encoder execution | QEMU 11.1.0 `qemu-hexagon -cpu v68`, Hexagon SDK clang 22.1.8 |
-| Modules used | `aptx_adaptive_enc_module.so.1`, `libaptXAdaptiveEnc3.so` (user-supplied blobs, not in this repository) |
+| Encoder | QEMU 11.1.0 `qemu-hexagon -cpu v68`, clang 22.1.8 |
+| Modules | `aptx_adaptive_enc_module.so.1`, `libaptXAdaptiveEnc3.so` |
 
 The host has no Qualcomm Bluetooth controller, so the aptX Adaptive encoder is
 executed in QEMU on the Hexagon DSP module extracted from a phone firmware. The
@@ -86,13 +86,13 @@ The Android source was captured twice:
 
 The host's SET_CONFIG is byte-identical to the phone's towards the MOMENTUM 5:
 
-```
+```text
 d7 00 00 00 ad 00 40 02 50 64 64 64 ff ff 00 01 92 00 00 0f 02 03 03 03 00 aa
 ```
 
 The wire payload is byte-identical as well:
 
-```
+```text
 80 60 <seq> <ts> 00 00 00 00 | a8 61 64 01 00 00 00 ae | 83 00 d0 a1 ...
 RTP 12 bytes                    OTA 8 bytes                codec frame 656 bytes
 ```
@@ -121,7 +121,7 @@ TTP step of a working source agree at 25 ms per frame).
 
 ### 4.2 Payload-size table
 
-```
+```text
 packet_type:  0    1    2    3    4    5    6    7    8
 payload   : 348  656  140  152  560  760  960  348  980   (bytes)
 ```
@@ -131,7 +131,7 @@ payload   : 348  656  140  152  560  760  960  348  980   (bytes)
 Disassembling `aptx_adaptive_enc_module.so.1` yields two static tables indexed by
 the encoder's quality level:
 
-```
+```text
 period (ms)  @0x1CDA0: [20, 19, 18, 17, 16, 15, 14, 13, 12]
 pcm_interval @0x1CDC8: [960, 912, 864, 816, 768, 720, 672, 624, 576]  (at 48 kHz)
 ```
@@ -147,7 +147,7 @@ all levels to the same choice; sending kbit/s values makes the map effective.
 
 Disassembling `encLevelHqStateMachine` (module offset `0x12eb0`) shows:
 
-```
+```text
 r3 = level - 6
 r4 = 0xae                      ; default version = R2
 if (level - 6) > 9 -> keep 0xae
@@ -185,7 +185,7 @@ not a bug.
 With the module's logging enabled (section 9) the following sequence is visible
 for a 48 kHz session:
 
-```
+```text
 INIT:   Final bitrate after all limiting conditions in Kona is 364000 bps
 INIT:   totalSamplesPerPacket 1344
 INIT:   Actual Period selected 14.0        (period code 56)
@@ -235,17 +235,17 @@ The following hypotheses were tested and are **not** the cause of the silence:
 
 | Hypothesis | Experiment | Result |
 | --- | --- | --- |
-| Missing OTA header | send `RTP + OTA + frame`, byte-identical to the phone | silent |
-| Wrong AVDTP configuration | phone-identical `40 02 … 92` (44.1 kHz stereo) | silent |
-| Invalid bitstream | replay the phone's own captured records (266/266 identical) | silent |
-| Low bitrate / long frames | phone frames with a 16 ms period (62.5 fps, 338 kbps) | silent |
-| Wrong sample rate | 96 kHz end-to-end (OTA header + `SOURCE_TYPE_1` + `0x92`) | silent |
+| Missing OTA header | send `RTP + OTA + frame`, like the phone | silent |
+| Wrong AVDTP config | phone-identical `40 02 … 92` (44.1k) | silent |
+| Invalid bitstream | replay the phone's records (266/266 same) | silent |
+| Low bitrate / long frames | phone frames, 16 ms (62.5 fps, 338k) | silent |
+| Wrong sample rate | 96 kHz end-to-end (`SOURCE_TYPE_1` + `0x92`) | silent |
 | Missing R2.2 version byte | replay with version `0xaf` | silent |
-| Wrong R2.2 packet shape | full 768-byte `0xaf`/`channel_mode 0xa0` packets | silent |
+| Wrong R2.2 shape | 768-byte `0xaf`/`channel_mode 0xa0` | silent |
 | Discontinuous stream | 30 s continuous stream, zero gaps > 60 ms | normal |
-| Source device class | adapter Class of Device set to "smartphone" (`0x5a020c`) | silent |
-| AVRCP playback state | host reports `Stopped`; aptX HD plays in the same state | not a gate |
-| Encoder emitting silence | live capture decodes to a 440.1 Hz tone (RMS -31 dBFS) | real audio |
+| Source device class | adapter CoD = "smartphone" (`0x5a020c`) | silent |
+| AVRCP playback state | host says `Stopped`; HD plays anyway | not a gate |
+| Encoder emitting silence | live capture decodes to 440.1 Hz | real audio |
 
 In every case the sink accepts the stream at L2CAP level (writes succeed, no
 back-pressure) and produces no audio. The sink also sends **no** reverse ACL data
@@ -306,10 +306,10 @@ controller-to-DSP feedback path.
 | `aptx-lossless-helper.c` | unified R2/R3 helper (the QEMU adapter) |
 | `compat.c` | compatibility symbols for the proprietary module |
 | `compat-log.c` | the same file with the module log gate removed (see below) |
-| `aptx_test.py` | end-to-end configuration matrix driver (drop-in, restart, capture, analyse) |
-| `rtp_analyse.py` | btmon capture analysis (RTP/TTP rates, frame lengths, cadence) |
+| `aptx_test.py` | configuration matrix driver (drop-in, restart, capture) |
+| `rtp_analyse.py` | btmon analysis (RTP/TTP rates, frame length) |
 | `acl.py` | btsnoop HCI-ACL reassembler (respects the PB flag) |
-| `helper_probe.py`, `helper_sweep.py` | drive the helper directly and sweep its parameters |
+| `helper_probe.py`, `helper_sweep.py` | drive the helper, sweep params |
 | `raw_probe.py` | raw `set_param` probe for the proprietary module |
 | `TOOLS.md` | how to build the helper with module logging enabled |
 
@@ -334,8 +334,17 @@ sudo pkill btmon
 python3 rtp_analyse.py /tmp/cap.hci
 
 # 4. decode the captured frames with the reference decoder
-tshark -r /tmp/cap.hci -Y "btl2cap.length>600" -T fields -e btl2cap.payload \
-  | python3 -c 'import sys,binascii; open("/tmp/frames.bin","wb").write(b"".join(binascii.unhexlify(l.strip())[20:676] for l in sys.stdin if l.strip()))'
+tshark -r /tmp/cap.hci -Y "btl2cap.length>600" -T fields \
+  -e btl2cap.payload > /tmp/payloads.txt
+python3 - <<'PY'
+import binascii
+out = bytearray()
+for line in open('/tmp/payloads.txt'):
+    b = binascii.unhexlify(line.strip())
+    if len(b) >= 676:
+        out += b[20:676]
+open('/tmp/frames.bin', 'wb').write(bytes(out))
+PY
 wine aptx-adaptive-packet-header-strip_NEW_BYTE_SWAP.exe -e -d /tmp/dec /tmp/frames.bin
 wine test-decoder.exe -i /tmp/dec/frames-clean.bin -o /tmp/out.wav -x hq
 ```

@@ -108,7 +108,7 @@ export LD_LIBRARY_PATH="$host_lib"
   -o aptx-lossless-helper
 ```
 
-### CAPI initialization contract
+## CAPI initialization contract
 
 The helper now follows the AudioReach container sequence: it calls
 `capi_aptx_adaptive_enc_get_static_properties()` with the same init property
@@ -155,8 +155,8 @@ the bogus advance (or correcting it as above) unblocks the stream:
 
 | configuration | before | after |
 | --- | --- | --- |
-| R3 @48 kHz | SIGSEGV / `EOVERFLOW` after 89 calls | 2000 packets in 2000 calls |
-| R2.2 Lossless @44.1 kHz | stalls after 7 packets | 1945 packets in 2000 calls |
+| R3 @48 kHz | SIGSEGV / `EOVERFLOW` after 89 calls | 2000/2000 calls |
+| R2.2 Lossless @44.1 kHz | stalls after 7 packets | 1945/2000 calls |
 | R2 lossy @48/96 kHz | unchanged (224 packets) | unchanged |
 
 With the cursor fix in place the R3 kernel runs continuously and its output is
@@ -167,7 +167,6 @@ actually transmits.
 
 The `EOVERFLOW` guard is kept as a safety net in case a cursor ever approaches
 the allocation end again.
-
 
 Place the user-supplied `aptx_adaptive_enc_module.so.1`,
 `libaptXAdaptiveEnc.so`, and (for R3) the matching
