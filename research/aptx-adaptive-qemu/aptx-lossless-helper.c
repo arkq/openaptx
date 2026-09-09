@@ -17,6 +17,7 @@
 
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -1258,6 +1259,34 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 	if (!state->initialized || pcm == NULL || packet_size == NULL ||
 			pcm_size == 0 || pcm_size > PCM_BYTES_MAX)
 		return -EINVAL;
+
+	/* Diagnostic replay.  When APTX_ADAPTIVE_REPLAY points at a file of
+	 * 664-byte OTA records (eight-byte transport header followed by a
+	 * 656-byte codec frame), return those records verbatim instead of
+	 * encoding.  This pushes a captured reference bitstream through the exact
+	 * same PipeWire/BlueZ path, so an encoder defect can be told apart from a
+	 * transport or negotiation defect. */
+	if (state->mode == APTX_ADAPTIVE_HELPER_MODE_R2) {
+		const char *replay = getenv("APTX_ADAPTIVE_REPLAY");
+		if (replay != NULL && *replay != '\0') {
+			static int replay_fd = -2;
+			static uint8_t replay_buf[664];
+			if (replay_fd == -2)
+				replay_fd = open(replay, O_RDONLY);
+			if (replay_fd >= 0) {
+				ssize_t n = read(replay_fd, replay_buf, sizeof(replay_buf));
+				if (n != (ssize_t)sizeof(replay_buf)) {
+					(void)lseek(replay_fd, 0, SEEK_SET);
+					n = read(replay_fd, replay_buf, sizeof(replay_buf));
+				}
+				if (n == (ssize_t)sizeof(replay_buf)) {
+					memcpy(packet, replay_buf, sizeof(replay_buf));
+					*packet_size = sizeof(replay_buf);
+					return 0;
+				}
+			}
+		}
+	}
 
 	if (state->r3_direct_ready)
 		return process_audio_direct_r3(state, pcm, pcm_size, packet,
