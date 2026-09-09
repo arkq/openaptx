@@ -382,6 +382,13 @@ payload 的编号，**不能**照抄到 A2DP 字段上。
 和 `... Bitrate selected is %d`，说明**帧长由码率等级决定**；但 helper 发的
 bitrate map（279–420 kbps × 5 级）似乎没被采纳（`set_quality_level(5)` 无效果）。
 
+**补充实测（第三轮开始）**：给 helper 加了 `APTX_R2_PROFILE` 覆盖，遍历
+`0,1,2,3,4,5,6,7,0x1000,0x2000,0x4000` 十一个 profile 值，输出**恒为
+1200 样本/帧、664 字节包**。所以 R2 wrapper 在 48 kHz 下的帧长与 profile 无关，
+212 kbps 是它的固有值——而手机→电脑的 48 kHz 流（RTP ts +1200、656 B 载荷）
+也正好是 212 kbps。**因此码率不是静音的原因**；用户的 50 kB/s 观察对应的是
+96 kHz 段（656 B / 12.5 ms）。
+
 ### 12.4 本轮修掉的真 bug：96 kHz selector
 
 helper 的 `capi_rate_selector()` 原来把 96000 映射到 **0**，而实测：

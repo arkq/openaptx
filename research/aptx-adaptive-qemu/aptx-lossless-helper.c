@@ -687,6 +687,14 @@ static int configure_r2_capi(struct helper_state *state)
 		config.max_sink_buffer[i] = 50;
 	}
 	config.profile = APTX_ADAPTIVE_PROFILE_HIGH_QUALITY;
+	/* Diagnostic override: the frame duration (and therefore the wire
+	 * bitrate) is chosen by the module from its profile/bitrate state, so
+	 * allow probing other profile values. */
+	{
+		const char *pf = getenv("APTX_R2_PROFILE");
+		if (pf != NULL && *pf != '\0')
+			config.profile = (uint32_t)strtoul(pf, NULL, 0);
+	}
 	config.twsplus_dual_mono_mode = 0;
 	config.twsplus_fade_duration = 255;
 	memcpy(config.config_stream, state->r2_stream,
