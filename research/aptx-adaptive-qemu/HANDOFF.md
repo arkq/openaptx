@@ -571,3 +571,23 @@ SRC_COMPAT=/tmp/compat_log.c \
   bash /home/baizhu945/work/openaptx/build-helper/build-any.sh <helper.c> /tmp/helper-log
 # 注意：libgcc.so 要复制到 helper 同目录（rpath $ORIGIN）
 ```
+
+### 13.9 本轮补充的实测（第四轮上半）
+
+- **我们的 96 kHz 帧型和手机不一样**：手机 96k 段帧头 `8300b0a1`，我们
+  （selector 3 / FORCE_RATE=96000）是 `8300f0a1`。用参考解码器
+  （`aptx-adaptive-packet-header-strip -e` + `test-decoder.exe -x hq`）
+  确认两者都解出 **96000 Hz 立体声**，所以 0xb0/0xf0 不是采样率差异，
+  可能是信道模式或版本子码差异（待查）。48k 我们 `8300d0a1`、44.1k
+  `8300c0a1`，与手机一致。
+- **selector 映射实测**（encoder_rate=96000，CIE freq=0x20，1920 样本块）：
+  `0/1→48k(d0)`、`2→44.1k(c0)`、`3→96k(f0)`、`4..7→48k(d0)`。
+  96k 时 wrapper 每 2 个块出一个包 → 3840 样本/包（40 ms、period 0xa0），
+  码率只有 ~133 kbps。
+- **DELAY_REPORT 实测**：耳机对 aptX Adaptive 报 **260.0 ms**、对 aptX HD 报
+  **235.0 ms**（差 25 ms = 一个 AD 帧）。我们都正确回了 ResponseAccept。
+- **AVRCP 状态**：我们这边的 PlaybackStatus 一直是 `Stopped`（手机在 START
+  后立刻发 `Playing`）。但 aptX HD 在同样 `Stopped` 状态下用户能听到，
+  所以 AVRCP 状态不是门控条件。
+- 96 kHz 端到端（OTA 头 + SOURCE_TYPE=0x00 + features 0x92 + STEREO）：
+  流正常（25 fps、3840 样本/包、RTP 时钟 95.6k），仍静音。
