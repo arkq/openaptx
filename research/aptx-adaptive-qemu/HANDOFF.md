@@ -1,8 +1,9 @@
 # aptX Adaptive on a non-Qualcomm Linux host — 项目交接报告
 
-**最后更新**：2026-09-09 夜（本轮）
-**当前状态**：编码器 / 传输层 / AVDTP 信令均已用官方工具验证正确；
-根因锁定为 **PipeWire 插件里的 aptX Adaptive 采样率位掩码错误**，已修复并重建，待听感确认。
+**最后更新**：2026-09-09 深夜（第二轮）
+**当前状态**：AVDTP 配置与 RTP 头已与手机**逐字节一致**；耳机仍静音。
+根因进一步收窄到 **码率/帧长**：我们的 48 kHz 流只有 212 kbps，低于 aptX Adaptive
+最低的 279 kbps（用户实测正常应为 ~50 kB/s = 420 kbps）。
 
 ---
 
@@ -332,3 +333,70 @@ aptX HD 100% 可用（实测 `wrote:894` × 684，0 失败）。若实验失败�
 - `/home/baizhu945/work/openaptx/research/aptx-adaptive-qemu/STATUS.md` — 英文状态报告
 - `/home/baizhu945/work/openaptx/research/aptx-adaptive-qemu/gen-cntr-process-loop.md` — AudioReach gen_cntr 数据通路分析
 - `/home/baizhu945/work/kalimba/EDKCS-FORMAT.md`、`BT11-FIRMWARE-MAP.md`
+
+---
+
+## 12. 第二轮进展（2026-09-09 深夜）
+
+### 12.1 采样率位映射最终确定
+
+用户澄清：抓到的手机码流是**手机→电脑**（电脑当 sink），而 btsnoop 日志里出现的是
+**耳机**的 MAC（`80:C3:BA:B7:16:3B`）→ 那是**手机→耳机**的会话。据此：
+
+| 来源 | SET_CONFIG byte6/7 | features |
+|---|---|---|
+| 手机→耳机（btsnoop，默认 44.1k） | `0x40 0x02` | `0x0f000092` |
+| 手机→电脑（btmon 抓包，48k） | `0x10 0x02` | **`0x0f000017`** |
+
+结论：**`0x40 = 44.1k`、`0x10 = 48k`、`0x20 = 96k`**（耳机能力 `0x71` 的采样率位
+`0x70` 正好是这三个）。Qualcomm `bthost_ipc.h` 的 `44100=0x08` 是它自己 DSP
+payload 的编号，**不能**照抄到 A2DP 字段上。
+
+> 曾按 Qualcomm 表把 44100 改成 `0x08`、96000 改成 `0x40`（commit `bf15869`），
+> 已按上表**改回** `0x40/0x10/0x20`（commit `e7d50a6`）。
+
+### 12.2 与手机逐字节一致仍静音
+
+现在我们的 SET_CONFIG 是
+`d7 00 00 00 ad 00 10 02 50 64 64 64 ff ff 00 01 17 00 00 0f 02 03 03 03 00 aa`
+——与手机→电脑的配置**完全相同**（含 features `0x17`）。RTP 头也与手机逐字节一致
+（`80 60 <seq> <ts> 00000000`，PT=96、SSRC=0、ts 每帧 +1200）。**耳机仍静音**。
+
+新增的诊断开关（PipeWire 插件，env 可改、无需重建）：
+
+- `APTX_ADAPTIVE_FREQ_BITS=0xNN` — 直接钉住协商出的采样率位
+- `APTX_ADAPTIVE_FEATURES=0xNNNNNNNN` — 钉住 features 字
+
+### 12.3 真正的疑点：码率/帧长
+
+| 指标 | 我们的 48k 流 | 期望（用户实测手机） |
+|---|---|---|
+| 净载荷速率 | 656 B / 25 ms ≈ **212 kbps（26.4 kB/s）** | ≈ **420 kbps（~50 kB/s）** |
+| R2 帧长（实测） | 1200 样本 @48k、1102.8 @44.1k、1923.7 @96k | ? |
+
+**212 kbps 低于 aptX Adaptive 的下限 279 kbps**，很可能是耳机拒绝解码的原因。
+要拿到 420 kbps，帧长必须是 12.5 ms（48k→600 样本），而不是我们现在的 25 ms。
+
+模块内部日志里有
+`AVS_ENCODER_PARAM_ID_BIT_RATE_LEVEL_MAP N Selected Period=%f PCMinterval=%d`
+和 `... Bitrate selected is %d`，说明**帧长由码率等级决定**；但 helper 发的
+bitrate map（279–420 kbps × 5 级）似乎没被采纳（`set_quality_level(5)` 无效果）。
+
+### 12.4 本轮修掉的真 bug：96 kHz selector
+
+helper 的 `capi_rate_selector()` 原来把 96000 映射到 **0**，而实测：
+`1→48k、2→44.1k、**3→96k**`（帧头 `8300b0a1`，与手机 96k 段一致），其它值回落 48k。
+已改为 `3`。用参考解码器验证：selector 3 的输出解码为 **96000 Hz**。
+
+### 12.5 下一步（第三轮）
+
+1. **把帧长/码率做上去** ⭐ 最高优先。方向：
+   - 查 `AVS_ENCODER_PARAM_ID_BIT_RATE_LEVEL_MAP` 的正确 param ID / payload
+     （helper 用的 `0x000132e1` 可能不是模块认的那个）。
+   - 试不同 `profile` 值（helper 现在硬编码 `0x1000`），看 Period 是否变成 12.5 ms。
+   - 直接给模块一个 12.5 ms 的 PCM interval（`APTX_ADAPTIVE_CODEC_FRAMES=600`）看
+     它是否输出 600 样本/帧、总码率是否翻倍。
+2. 若码率上去了仍静音：抓手机→耳机侧无法抓包，只能反向用 FiiO BT11（QCC5181）
+   作为参考源，或继续查 controller/link 层。
+3. 模块日志：`compat.c` 里的 `HAP_debug`/`HAP_debug_v2` 已改为可透出
+   （`APTX_HAP_LOG=1`），但实测模块的日志仍未出现，需要进一步确认它走的是哪条通道。

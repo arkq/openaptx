@@ -644,13 +644,25 @@ static int capi_set_param(struct helper_state *state, uint32_t param_id,
 
 static uint32_t capi_rate_selector(uint32_t rate)
 {
+	/* Diagnostic override: the module logs "bad sampling rate value,
+	 * setting to default value 48K" for at least one selector value, so the
+	 * 0/1/2 mapping inherited from the Qualcomm HAL parser is not
+	 * necessarily the CAPI module's own enum.  Allow an explicit probe. */
+	const char *override = getenv("APTX_R2_RATE_SELECTOR");
+	if (override != NULL && *override != '\0')
+		return (uint32_t)strtoul(override, NULL, 0);
+	/* Measured against the CPH2749 module: selector 1 -> 48 kHz,
+	 * 2 -> 44.1 kHz, 3 -> 96 kHz (codec frame header 83 00 b0 a1).  Any
+	 * other value falls back to the module's 48 kHz default, which is why
+	 * the previous 96000 -> 0 mapping silently produced 48 kHz frames. */
 	switch (rate) {
 	case 44100:
 		return 2;
 	case 48000:
 		return 1;
+	case 88200:
 	case 96000:
-		return 0;
+		return 3;
 	default:
 		return UINT32_MAX;
 	}

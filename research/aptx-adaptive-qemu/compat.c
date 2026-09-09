@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <math.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -48,27 +50,42 @@ size_t memscpy(void *dst, size_t dst_size, const void *src, size_t src_size)
 void HAP_debug(uint32_t level, const char *file, uint32_t line,
 		const char *format, ...)
 {
-	(void)level;
-	(void)file;
-	(void)line;
-	(void)format;
+	/* The proprietary module reports its selected bitrate, period and
+	 * frame interval through HAP_debug.  Discarding it left the bridge
+	 * blind to the encoder's own view of the stream; forward it to stderr
+	 * when APTX_HAP_LOG is set. */
+	static int enabled = -1;
+	va_list ap;
+
+	if (enabled < 0)
+		enabled = getenv("APTX_HAP_LOG") != NULL;
+	if (!enabled || format == NULL)
+		return;
+
+	fprintf(stderr, "[HAP %u] %s:%u: ", level, file != NULL ? file : "?", line);
+	va_start(ap, format);
+	vfprintf(stderr, format, ap);
+	va_end(ap);
+	fprintf(stderr, "\n");
 }
 
-/* Do not dereference Qualcomm FARF arguments: their ABI varies by DSP build. */
+/* The v2 entry passes up to six already-unpacked arguments.  Their ABI varies
+ * by DSP build, so print the format string together with the raw argument
+ * words instead of trying to interpret the format. */
 void HAP_debug_v2(uint32_t level, const char *file, uint32_t line,
 		const char *format, uint32_t arg0, uint32_t arg1, uint32_t arg2,
 		uint32_t arg3, uint32_t arg4, uint32_t arg5)
 {
-	(void)level;
-	(void)file;
-	(void)line;
-	(void)format;
-	(void)arg0;
-	(void)arg1;
-	(void)arg2;
-	(void)arg3;
-	(void)arg4;
-	(void)arg5;
+	static int enabled = -1;
+
+	if (enabled < 0)
+		enabled = getenv("APTX_HAP_LOG") != NULL;
+	if (!enabled || format == NULL)
+		return;
+
+	fprintf(stderr, "[HAPv2 %u] %s:%u: %s | %08x %08x %08x %08x %08x %08x\n",
+			level, file != NULL ? file : "?", line, format,
+			arg0, arg1, arg2, arg3, arg4, arg5);
 }
 
 double _Sin(double value)
