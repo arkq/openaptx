@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "aptxadaptive.h"
@@ -243,6 +244,7 @@ struct helper_state {
 	uint8_t r3_out_buf_l[4096];
 	uint8_t r3_out_buf_r[4096];
 	uint32_t r3_ttp;
+	bool r3_ttp_started;
 	bool r3_direct_ready;
 
 	capi_event_callback_info_t callback_info;
@@ -1015,6 +1017,7 @@ static int r3_direct_setup(struct helper_state *state)
 	state->r3_ring_samples = ring_samples;
 	state->r3_out_frame_bytes = 328;
 	state->r3_ttp = 0x4e2; /* same base the module uses */
+	state->r3_ttp_started = false;
 
 	b = (uint32_t)(uintptr_t)state->r3_ring_l;
 	state->r3_in_l.base = b; state->r3_in_l.start = b; state->r3_in_l.end = b;
@@ -1093,6 +1096,20 @@ static int process_audio_direct_r3(struct helper_state *state, const uint8_t *pc
 	if (produced == 0 || produced > state->r3_out_frame_bytes)
 		produced = state->r3_out_frame_bytes;
 
+	/* The sink schedules each frame at the TTP in its own timebase, so the
+	 * TTP must track the wall clock rather than a fixed base: with a fixed
+	 * base the MOMENTUM 5 buffered ~1 s and then stopped accepting data.
+	 * TTP unit is 1/15000 s (R2 advances 375 per 25 ms). */
+	if (!state->r3_ttp_started) {
+		struct timespec now;
+		uint64_t ms;
+
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		ms = (uint64_t)now.tv_sec * 1000u +
+				(uint64_t)now.tv_nsec / 1000000u;
+		state->r3_ttp = (uint32_t)((ms * 15u) & 0xffffu);
+		state->r3_ttp_started = true;
+	}
 	ttp = state->r3_ttp;
 	packet[0] = ttp & 0xff;
 	packet[1] = (ttp >> 8) & 0xff;
