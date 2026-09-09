@@ -1,0 +1,43 @@
+# [open]aptx - build-and-test.yaml
+# SPDX-FileCopyrightText: 2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
+
+name: Build and Test
+
+on:
+  push:
+  pull_request:
+    branches: [ master ]
+
+env:
+  MAKEFLAGS: -j8
+
+jobs:
+
+  check:
+    strategy:
+      matrix:
+        build-type: [ Debug, Release ]
+        features:
+          - -DWITH_FFMPEG=ON -DWITH_FREEAPTX=OFF -DWITH_SNDFILE=ON
+          - -DWITH_FFMPEG=OFF -DWITH_FREEAPTX=ON -DWITH_SNDFILE=ON
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - name: Install Dependencies
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: |
+          libavcodec-dev
+          libavutil-dev
+          libfreeaptx-dev
+          libsndfile1-dev
+    - name: Configure Project
+      env:
+        CXXFLAGS: -Wall -Wextra -Werror -Wshadow
+      run: >
+        cmake -S ${{ github.workspace }} -B build
+        -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+        ${{ matrix.features }}
+    - name: Build Project
+      run: cmake --build build --config ${{ matrix.build-type }}

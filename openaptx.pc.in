@@ -1,3 +1,7 @@
+# [open]aptx - openaptx.pc
+# SPDX-FileCopyrightText: 2017-2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
+
 prefix=@CMAKE_INSTALL_PREFIX@
 exec_prefix=${prefix}
 includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@

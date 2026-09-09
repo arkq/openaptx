@@ -2,10 +2,9 @@
  * @file openaptx.h
  * @brief Reverse-engineered apt-X header file.
  *
- * This file is a part of [open]aptx.
- *
  * @copyright
- * This project is licensed under the terms of the MIT license.
+ * SPDX-FileCopyrightText: 2017-2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
  *
  * @note
  * The [open]aptx header file is based on the reverse-engineered proprietary

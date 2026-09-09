@@ -1,8 +1,7 @@
 /*
  * [open]aptx - aptx-lifecycle.c tests
- * Copyright (c) 2026 openaptx contributors
- *
- * This project is licensed under the terms of the MIT license.
+ * SPDX-FileCopyrightText: 2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
  */
 
 #include <assert.h>
@@ -15,17 +14,25 @@ int main(void) {
 	aptxbtdec_destroy(NULL);
 	aptxhdbtdec_destroy(NULL);
 
+	int rc = 0;
+
 	APTXDEC dec = malloc(SizeofAptxbtdec());
-	assert(dec != NULL);
-	assert(aptxbtdec_init(dec, 0) == 0);
-	aptxbtdec_destroy(dec);
+	if (dec == NULL)
+		return 1;
+	if (aptxbtdec_init(dec, 0) == 0)
+		aptxbtdec_destroy(dec);
+	else
+		rc = 1;
 	free(dec);
 
 	dec = malloc(SizeofAptxhdbtdec());
-	assert(dec != NULL);
-	assert(aptxhdbtdec_init(dec, 0) == 0);
-	aptxhdbtdec_destroy(dec);
+	if (dec == NULL)
+		return 1;
+	if (aptxhdbtdec_init(dec, 0) == 0)
+		aptxhdbtdec_destroy(dec);
+	else
+		rc = 1;
 	free(dec);
 
-	return 0;
+	return rc;
 }

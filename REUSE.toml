@@ -1,0 +1,36 @@
+version = 1
+
+[[annotations]]
+path = "archive/aarch64/libaptX*-rel-Android21-arm64.so"
+SPDX-FileCopyrightText = "2015 Qualcomm Technologies, Inc."
+SPDX-License-Identifier = "LicenseRef-Qualcomm-Proprietary"
+
+[[annotations]]
+path = "archive/armv6/libbt-*.so"
+SPDX-FileCopyrightText = "2014 Qualcomm Technologies, Inc."
+SPDX-License-Identifier = "LicenseRef-Qualcomm-Proprietary"
+
+[[annotations]]
+path = "archive/armv7/libaptX*-rel-Android21-ARMv7A.so"
+SPDX-FileCopyrightText = "2014 Qualcomm Technologies, Inc."
+SPDX-License-Identifier = "LicenseRef-Qualcomm-Proprietary"
+
+[[annotations]]
+path = "archive/armv7/libbt-*.so"
+SPDX-FileCopyrightText = "2014 Qualcomm Technologies, Inc."
+SPDX-License-Identifier = "LicenseRef-Qualcomm-Proprietary"
+
+[[annotations]]
+path = "archive/qdsp6/capi_v2_aptX*.so"
+SPDX-FileCopyrightText = "2018 Qualcomm Technologies, Inc."
+SPDX-License-Identifier = "LicenseRef-Qualcomm-Proprietary"
+
+[[annotations]]
+path = "archive/x86/libbt-*.so"
+SPDX-FileCopyrightText = "2014 Qualcomm Technologies, Inc."
+SPDX-License-Identifier = "LicenseRef-Qualcomm-Proprietary"
+
+[[annotations]]
+path = "src/sample/sonar.*"
+SPDX-FileCopyrightText = "2018 [open]aptx developers"
+SPDX-License-Identifier = "MIT"

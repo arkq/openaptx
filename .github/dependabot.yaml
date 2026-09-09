@@ -1,0 +1,12 @@
+# [open]aptx - dependabot.yaml
+# SPDX-FileCopyrightText: 2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
+
+version: 2
+updates:
+
+  # Check for updates to GitHub Actions every month
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

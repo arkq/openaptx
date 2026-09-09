@@ -1,15 +1,16 @@
 # [open]aptx - CMakeLists.txt
-# Copyright (c) 2017-2021 Arkadiusz Bokowy
-
-add_executable(aptxadaptive-test aptx-adaptive-stream.c)
-target_compile_features(aptxadaptive-test PRIVATE c_std_11)
-target_link_libraries(aptxadaptive-test PRIVATE aptx)
-add_test(NAME aptxadaptive-stream COMMAND aptxadaptive-test)
+# SPDX-FileCopyrightText: 2017-2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
 
 add_executable(aptx-lifecycle-test aptx-lifecycle.c)
 target_compile_features(aptx-lifecycle-test PRIVATE c_std_11)
 target_link_libraries(aptx-lifecycle-test PRIVATE aptx)
 add_test(NAME aptx-lifecycle COMMAND aptx-lifecycle-test)
+
+add_executable(aptxadaptive-test aptx-adaptive-stream.c)
+target_compile_features(aptxadaptive-test PRIVATE c_std_11)
+target_link_libraries(aptxadaptive-test PRIVATE aptx)
+add_test(NAME aptxadaptive-stream COMMAND aptxadaptive-test)
 
 if(ENABLE_APTX422)
 

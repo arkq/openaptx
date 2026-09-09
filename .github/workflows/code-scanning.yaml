@@ -1,0 +1,33 @@
+# [open]aptx - code-scanning.yaml
+# SPDX-FileCopyrightText: 2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
+
+name: Code Scanning
+
+on:
+  push:
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+
+  markdown-lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - name: Run Markdown Linter
+      uses: nosborn/github-action-markdown-cli@v3
+      with:
+        files: ${{ github.workspace }}
+
+  reuse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: REUSE Compliance Check
+        uses: fsfe/reuse-action@v6

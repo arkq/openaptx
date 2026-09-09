@@ -1,3 +1,6 @@
+#SPDX-FileCopyrightText: 2017-2026 [open]aptx developers
+# SPDX-License-Identifier: CC0-1.0
+
 # Object files
 *.o
 *.ko
