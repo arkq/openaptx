@@ -635,3 +635,38 @@ SRC_COMPAT=/tmp/compat_log.c \
    再用**手机当 sink**（需要 USB+adb）验证我们的源。
 3. 若要继续纯本地推进，只能做**直接调用内层 R2 编码器**（绕过 wrapper）以
    拿到 12.5 ms 帧，但 13.10 已经说明帧长不是门控，优先级应降低。
+
+### 13.12 第四轮下半：设备类型实验与手机日志新证据
+
+- **Class of Device 实验（失败）**：把适配器 CoD 从 `0x7c010c`（Computer/Laptop）
+  改成 `0x5a020c`（Phone/Smart phone）并重连耳机，AD 仍静音；已改回。
+  → 耳机不按源设备类型做门控。
+- **实时流内容校验**：抓下我们经蓝牙发出的 AD 流，用参考解码器解出
+  44100 Hz 立体声、FFT 主峰 440.1 Hz，RMS -31 dBFS —— 确实是真实音频，
+  不是静音帧（相对源文件 -4.3 dBFS 有约 24 dB 衰减，原因待查，但不影响
+  可听性判断）。
+- **手机最新 btsnoop（从 /data/log/bt 拉取）**：
+  - 手机自己的 aptX Adaptive 源能力 = `f0 3e 50 64 64 64 ff ff 00 01 17 ...`
+    （采样率位全开、信道模式 0x3e、features `0x0f000017`）。
+  - 手机→耳机侧有一次 **RECONFIGURE 到 48 kHz 立体声**
+    （value `10 02 50 64 64 64 ff ff 00 01 92 ...`）——说明手机会按内容
+    采样率重配流，我们已测过 48k，不是门控。
+  - 同一日志里还有我们电脑当 sink 的会话（我们的 SET_CONFIG
+    `41 08 ... 92`，耳机侧 capabilities `71 0a ... 82`）。
+- **TTP 复核**：模块自身 TTP 每 25 ms 只走 4 个单位（基本冻结），helper 的
+  覆盖值每 25 ms 走 375~405（≈15000/s）——覆盖是正确的，模块原值不可用。
+- **手机 A2DP sink 不可用**：`bluetooth.profile.a2dp.sink.enabled=false`，
+  非 root 无法开启（用户明确不 root），实验 B 走不通。
+
+### 13.13 剩下的可能性
+
+到这一步，能被主机侧观测的差异已经全部对齐，只剩两类：
+
+1. **控制器/空口层**：手机是 Qualcomm 控制器 + A2DP offload，BT11 是 QCC5181，
+   我们 AX210 走主机 L2CAP。三者中只有我们不行。
+   → 最便宜的判定实验：借一个**非 Intel 的 USB 蓝牙棒**（Realtek/CSR 等）插上
+   试 AD。若换控制器能出声，说明是 AX210/Intel 侧的空口行为；若仍静音，
+   说明是主机栈或耳机固件对 Qualcomm 源的依赖。
+2. **耳机固件对 Qualcomm 源的依赖**：若属此类，主机侧再怎么改都无解，
+   只能换 sink 或换控制器（且控制器要真能触发 Qualcomm 私有行为，
+   而 Linux 的 BlueZ 不会用 QCNCM865 的 aptX offload，所以换卡大概率无效）。
