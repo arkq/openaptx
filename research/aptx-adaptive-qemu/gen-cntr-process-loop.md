@@ -421,3 +421,27 @@ R2 实测：375 单位 / 25 ms → **15 单位/ms**（TTP 单位 = 1/15000 s）�
   节点退回 `cvsd / headset-head-unit`，端口变成 `playback_MONO`。
 - 图以 2048 样本（42.67 ms）为周期，但 codec 块是 720 帧；helper 阻塞在 `anon_pipe_read` 等输入。
 - 实测 helper 自身编码速度 **1142 包/秒**（只需 66.7），qemu CPU 仅 4.5% —— 瓶颈不在编码。
+
+### 9.5 决定性修复：JOINT_STEREO（2026-09-09）
+
+对照实验（同一副 MOMENTUM 5、同一条 AX210 链路）：
+
+| 编解码器 / 配置 | socket 写入 | 发送缓冲 | 吞吐 |
+|---|---|---|---|
+| aptX HD | `wrote:894` | `unsent 0/7160` | 正常 |
+| SBC | `wrote:96` | `unsent 0/4608` | 正常 |
+| aptX Adaptive + **STEREO(0x02)** | **`wrote:-1` EAGAIN** | 堆积 2704/7160 | 17.8 KB/s |
+| aptX Adaptive + **JOINT_STEREO(0x08)** | **成功** | 排空 | **384 KB/s** |
+
+对端能力 `channel_mode = 0x0a`（STEREO | JOINT_STEREO），插件原来无条件优先选 STEREO，
+耳机收到后不 ACK → L2CAP 缓冲堆积 → socket 写 EAGAIN → 11 B/s → 无声。
+
+改为优先 JOINT_STEREO（保留 `APTX_ADAPTIVE_CHANNEL_MODE=stereo` 覆盖）：
+
+```
+传输配置: d7 00 00 00 ad 00 12 08 ...   ← channel_mode = 0x08
+实测:     PCM 输入 384479 B/s（满速）
+          码流输出  44832 B/s（≈358 kbps）
+```
+
+**aptX Adaptive 至此在真实耳机上打通。**
