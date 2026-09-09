@@ -388,3 +388,36 @@ R2/R2.2 保持 672；`helper_bytes`、`block_size`、`source_frames` 随之推�
 ```
 
 每个速率都是 **400 包 / 400 块，零丢包**。
+
+---
+
+## 9. 真实耳机联调（MOMENTUM 5，2026-09-09）
+
+### 9.1 已修复的三个真实链路缺陷
+
+| # | 症状 | 根因 | 修复 |
+|---|---|---|---|
+| 1 | 蓝牙管理器无 aptX Adaptive 选项 | WirePlumber 从 stock `pipewire-1.6.8` 加载 SPA 插件目录 | `wireplumber.override { pipewire = pipewire-aptx-adaptive; }` + `services.pipewire.wireplumber.package` |
+| 2 | 连接后无声，速率 11 B/s | `MemoryDenyWriteExecute=yes` 阻止 qemu-hexagon 的 TCG JIT（`mprotect failed`） | 对 pipewire/wireplumber 关闭该硬化项 |
+| 3 | 播放中掉回 HFP/CVSD | WirePlumber `bluetooth.autoswitch-to-headset-profile` | 设为 `false` |
+
+### 9.2 TTP 增量修正
+
+R2 实测：375 单位 / 25 ms → **15 单位/ms**（TTP 单位 = 1/15000 s）。
+原直编管线对 15 ms 帧也用了 375（应为 225），导致耳机缓冲被耗尽。
+已改为按真实帧长计算：`ttp += frames * 15000 / rate`。
+
+### 9.3 App 开启无损模式后的对端能力
+
+```
+开启前: features=0x0f000002  peer-r22=0
+开启后: features=0x0f000082  peer-r22=1     ← 0x80 (R2.2/Lossless) 已置
+协商:   features=0x0f000092
+```
+
+### 9.4 仍存在的问题
+
+- A2DP transport 每隔 1–3 分钟被释放（`busctl tree` 中 sep 节点消失，设备 profile 回到 `off`），
+  节点退回 `cvsd / headset-head-unit`，端口变成 `playback_MONO`。
+- 图以 2048 样本（42.67 ms）为周期，但 codec 块是 720 帧；helper 阻塞在 `anon_pipe_read` 等输入。
+- 实测 helper 自身编码速度 **1142 包/秒**（只需 66.7），qemu CPU 仅 4.5% —— 瓶颈不在编码。

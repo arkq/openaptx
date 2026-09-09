@@ -1109,7 +1109,11 @@ static int process_audio_direct_r3(struct helper_state *state, const uint8_t *pc
 	memcpy(packet + 8, state->r3_out_buf_l, produced);
 	memcpy(packet + 8 + produced, state->r3_out_buf_r, produced);
 	*packet_size = 8 + 2 * produced;
-	state->r3_ttp = ttp + 375; /* same step the R2 path uses per frame */
+	/* The TTP unit is 1/15000 s: the R2 path advances 375 per 25 ms packet.
+	 * Advance by the real frame duration instead of a fixed 375 so the sink's
+	 * buffer neither underruns nor overruns. */
+	state->r3_ttp = ttp + (uint32_t)(((uint64_t)frames * 15000u) /
+			(state->encoder_rate ? state->encoder_rate : 48000u));
 
 	/* The encoder advances the input descriptor's start itself (measured:
 	 * 720 samples per call at 48 kHz).  Only compact when the consumed prefix
