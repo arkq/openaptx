@@ -41,7 +41,11 @@ host block size must match it, otherwise the wrapper only produces a packet
 every other call and the RTP timestamp drifts against the codec frames.
 
 See `STATUS.md` for the current end-to-end status, the protocol findings and the
-list of hypotheses that have been ruled out by measurement.
+list of hypotheses that have been ruled out by measurement.  The other documents
+in this directory are `gen-cntr-process-loop.md` (the AudioReach `gen_cntr`
+data-path analysis the helper loop is modelled on), `HANDOFF.md` (a detailed
+working log, written in Chinese) and `TOOLS.md` (how to build the helper with
+the module's own diagnostics enabled).
 
 The PipeWire bridge derives the 11-byte R2/R2.2 extension stream from the
 negotiated Qualcomm A2DP codec information (including the peer feature mask
