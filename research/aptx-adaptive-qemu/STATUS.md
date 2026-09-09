@@ -77,26 +77,43 @@ controller (`persist.bluetooth.a2dp_offload.disabled = false`), so its log
 contains AVDTP signalling but no media packets — a reference bitstream could not
 be obtained from it.
 
-## Remaining gap
+## Remaining gap / latest breakthrough
 
-With everything above fixed, the stream is accepted at the L2CAP level
-(`wrote:676`, zero EAGAIN, buffer drains), the RTP timestamps advance by exactly
-one frame, TTP advances by the frame duration, and the OTA version byte is `0xae`
-(R2) — but the sink produces no audio.
+The decisive reference was captured by making the AX210 a capture-only A2DP sink
+for the HONOR 90GT. The sink callback receives the already-decrypted media
+payload, so BR/EDR encryption is not an obstacle. At 48 kHz the phone delivers
+**656-byte frames** whose payload begins with the same structure as the R2 helper:
 
-Two observations point at the encoder payload itself:
+```
+phone:  83 00 d4 a1 9e 00 4e 80 ...
+helper: 83 00 d4 a1 f6 87 87 fc ... (after encoder priming)
+```
 
-- The first 14 payload bytes are identical across packets
-  (`83 00 d0 a1 f2 7f ff 0f 87 9f ff ff ff 0f`) and only the following bytes
-  change, even though the input is a 440 Hz sine.
-- The payload is 656 bytes per 25 ms frame ≈ 210 kbps, below the lowest
-  documented aptX Adaptive level (279.6 kbps → ≈872 bytes).
+The R2 helper returns a 664-byte container record: an 8-byte internal OTA prefix
+followed by a 656-byte codec frame. The phone's decoded A2DP payload is 656 bytes
+and does not include that helper prefix. PipeWire's R2 encode path was copying
+all 664 bytes to RTP. The latest diagnostic change adds
+`APTX_ADAPTIVE_STRIP_OTA=1`, causing ordinary R2 to send only the 656-byte codec
+frame; R3/Lossless remains unchanged. This now matches the working Android
+source's wire payload boundary exactly. Headphone reconnection is pending after
+this rebuild, so audible output from this last change is not yet verified.
 
-IMCL quality feedback (`send_imcl_quality_level(level 5)`) and the bitrate map
-have no effect on the produced size, so the wrapper's rate control is not being
-driven from the host side. Whether the fixed prefix is a legitimate frame header
-or a sign that the encoder is still not consuming the input could not be
-determined without a known-good aptX Adaptive bitstream to compare against.
+The reference data is archived as:
+
+```
+/home/baizhu945/work/phone-btsnoop/aptx-adaptive-reference-48k96k.bin
+```
+
+The earlier apparent constant-prefix problem was partly an observation-window
+artifact: the R2 wrapper has roughly 20 frames of priming delay. A direct helper
+run with 1200-sample blocks eventually produces input-dependent frames; after
+priming, its headers and 656-byte frame size closely match the phone reference.
+
+IMCL quality feedback (`send_imcl_quality_level(level 5)`) does not change the
+656-byte frame size, but that is no longer the primary issue: the phone reference
+also uses 656-byte frames. The next verification is simply to reconnect the
+MOMENTUM 5 and compare whether stripping the internal 8-byte wrapper restores
+audio.
 
 ## Artefacts
 

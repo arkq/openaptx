@@ -1308,8 +1308,15 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 		(capi_stream_data_t *)&output_streams[0],
 		(capi_stream_data_t *)&output_streams[1],
 	};
+	/* capi_aptx_adaptive_enc_process_wrapper @0x137e4 dispatches to the embedded
+	 * R3 kernel only when BOTH module_memory+0x24d == 3 AND the configured rate
+	 * at module_memory+0x42f4 == 0xac44 (44100).  Checking the mode byte alone
+	 * made this helper pass two output descriptors and reset the R3 input
+	 * cursors on a genuine single-input/single-output R2 call, which destroyed
+	 * the input and left the encoder emitting a constant (silence) frame. */
 	const bool r3_kernel = state->mode == APTX_ADAPTIVE_HELPER_MODE_R3 ||
-			*(uint8_t *)(state->module_memory + 0x24d) == 3;
+			(*(uint8_t *)(state->module_memory + 0x24d) == 3 &&
+			 *(uint32_t *)(state->module_memory + 0x42f4) == 0xac44u);
 	/* The R2 wrapper may now be executing its embedded R3 kernel after the
 	 * 2.2 custom init parameter.  Preserve both output-port descriptors for
 	 * that case; only a genuine R2 kernel is SISO. */
@@ -1346,6 +1353,24 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 				s32[0], s32[1], s32[2], s32[3], s32[4], s32[5], s32[6], s32[7]);
 		}
 		state->module->vtbl_ptr->process(state->module, inputs, outputs);
+		if (getenv("APTX_DUMP_R2_STATE") && state->mode == APTX_ADAPTIVE_HELPER_MODE_R2) {
+			static unsigned int dump_count;
+			if (dump_count++ < 12) {
+				const uint32_t *m = (const uint32_t *)state->module_memory;
+				const int32_t *in = (const int32_t *)(uintptr_t)m[0x10 / 4];
+				fprintf(stderr,
+					"R2[%u] inlen=%u outlen=%u m214=%08x m218=%08x m21c=%08x m240=%08x m249=%02x m24d=%02x rate=%08x pcm=%p\n",
+					dump_count, input_buffer.actual_data_len,
+					output_buffers[0].actual_data_len, m[0x214 / 4], m[0x218 / 4],
+					m[0x21c / 4], m[0x240 / 4],
+					*((const uint8_t *)state->module_memory + 0x249),
+					*((const uint8_t *)state->module_memory + 0x24d),
+					m[0x42f4 / 4], (void *)in);
+				fprintf(stderr, "  internal[0..7]=%08x %08x %08x %08x %08x %08x %08x %08x\n",
+					m[0x27c / 4], m[0x280 / 4], m[0x284 / 4], m[0x288 / 4],
+					m[0x28c / 4], m[0x290 / 4], m[0x294 / 4], m[0x298 / 4]);
+			}
+		}
 		if (getenv("APTX_DUMP_RING")) {
 			uint32_t lbase = *(uint32_t *)(state->module_memory + R3_LEFT_BASE_CURSOR);
 			uint32_t lstart = *(uint32_t *)(state->module_memory + R3_LEFT_DATA_CURSOR);
@@ -1434,6 +1459,25 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 	if (aptx_adaptive_next_ota_packet(packet, produced, &header,
 			&payload, &consumed) < 0 || consumed != produced)
 		return -EBADMSG;
+
+	/* The R2 CAPI wrapper only advances its TTP when it receives sink-side
+	 * clock feedback (the aptX Adaptive calibration messages).  Nothing sends
+	 * those in this bridge, so the wrapper leaves the field frozen and the
+	 * sink cannot schedule the frames.  Replace it with a wall-clock derived
+	 * value, exactly as the direct R3 pipeline does.  The TTP unit is
+	 * 1/15000 s. */
+	if (state->mode == APTX_ADAPTIVE_HELPER_MODE_R2) {
+		struct timespec now;
+		uint64_t ms;
+		uint32_t ttp;
+
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		ms = (uint64_t)now.tv_sec * 1000u +
+				(uint64_t)now.tv_nsec / 1000000u;
+			ttp = (uint32_t)((ms * 15u) & 0xffffu);
+		packet[0] = (uint8_t)(ttp & 0xffu);
+		packet[1] = (uint8_t)((ttp >> 8) & 0xffu);
+	}
 
 	*packet_size = produced;
 	state->out_port.actual_data_len = 0;
