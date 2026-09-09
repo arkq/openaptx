@@ -591,3 +591,47 @@ SRC_COMPAT=/tmp/compat_log.c \
   所以 AVRCP 状态不是门控条件。
 - 96 kHz 端到端（OTA 头 + SOURCE_TYPE=0x00 + features 0x92 + STEREO）：
   流正常（25 fps、3840 样本/包、RTP 时钟 95.6k），仍静音。
+
+### 13.10 第四轮上半：所有“码流/格式”假设都被否掉
+
+用**手机自己的帧**做回放，四种组合全部静音：
+
+| # | 回放内容 | 配置 | 结果 |
+|---|---|---|---|
+| 1 | 手机 48k 帧（OTA 原样） | 48k / stereo / f92 | 静音 |
+| 2 | 手机 44.1k 帧（OTA 原样，含手机原始 TTP） | 44.1k / stereo / f92 | 静音 |
+| 3 | 手机 44.1k 帧 + 干净单调 TTP | 44.1k / stereo / f92 | 静音 |
+| 4 | 完整 R2.2 包（768 B、版本 0xaf、chan 0xa0、28 ms） | 44.1k / stereo / f92 | 静音 |
+
+再加之前否掉的：OTA 头、SET_CONFIG、16 ms/338 kbps、96 kHz、只改版本字节。
+**结论：静音与码流内容、OTA 头、帧长/码率、R2.2 格式都无关。**
+
+同时确认（本轮新增证据）：
+
+- 用参考解码器解手机 `aptx-adaptive-reference-48k96k.bin`：
+  **secA（8300b0）解出 96000 Hz 单声道**、secB（8300d0）解出 48000 Hz 立体声；
+  我们的 96k（8300f0）解出 96000 Hz 立体声。所以帧头第二字节同时编码
+  采样率**和声道数**（b0=96k mono、f0=96k stereo、c0=44.1k、d0=48k），
+  不是 bug。
+- 手机的 44.1k 流（abr0）本来就是 **656 B / 25 ms = 210 kbps**，和我们一样。
+  用户说的 ~50 kB/s 实测对应的是 **aptX HD**（我们实测 55 kB/s）。
+  **所以码率也不是异常**——之前的“码率偏低”判断要撤回。
+- 链路设置：我们的 HCI 里**没有** Write Link Policy / Packet Type / Flush
+  Timeout / Sniff 相关命令；手机的日志里这些都有（还有 Enhanced Flush）。
+  AD 媒体是 1 个 ACL 包/PDU，不分片。
+- AVRCP：我们 PlaybackStatus 一直是 Stopped（手机 START 后立刻 Playing），
+  但 aptX HD 在同样 Stopped 下用户能听到 → 不是门控。
+
+### 13.11 第四轮下半：剩下的方向
+
+到这里，“我们发的东西和手机发的东西一样”已经被穷尽验证。剩下的差异只在：
+
+1. **RTP 头的起始 seq/ts**（我们从 0 开始，手机是 0x3a2/0x110760 之类的随机值）
+   —— 需要改插件才能测。
+2. **控制器/链路层**：手机是 Qualcomm 控制器 + A2DP offload，我们是 AX210 +
+   主机侧 L2CAP；aptX Adaptive 的**反向反馈/时钟同步**在手机上走的是控制器→DSP
+   的私有通道，我们根本收不到（30 s 抓包零反向 ACL）。
+   → 下一步优先：用 **FiiO BT11（QCC5181）** 接耳机验证“Qualcomm 源能出声”，
+   再用**手机当 sink**（需要 USB+adb）验证我们的源。
+3. 若要继续纯本地推进，只能做**直接调用内层 R2 编码器**（绕过 wrapper）以
+   拿到 12.5 ms 帧，但 13.10 已经说明帧长不是门控，优先级应降低。
