@@ -1,14 +1,23 @@
 # aptX Adaptive on a non-Qualcomm Linux host — 项目交接报告
 
-**最后更新**：本轮会话结束
-**当前状态**：传输层已与工作参考源逐字节对齐；音频仍无声，差异缩小到**帧头第 3 字节**
+**最后更新**：2026-09-09 夜（本轮）
+**当前状态**：编码器 / 传输层 / AVDTP 信令均已用官方工具验证正确；
+根因锁定为 **PipeWire 插件里的 aptX Adaptive 采样率位掩码错误**，已修复并重建，待听感确认。
 
 ---
 
 ## 0. 一句话总结
 
-我们把 aptX Adaptive 从"完全不通"推进到"传输层与手机参考源字节一致"，唯一剩余差异是
-**编码器输出的帧头字节 2 几乎恒为 `0xd0`**，而工作正常的 Android 源在 `0xd0`–`0xd7` 之间变化。
+我们这轮做到了三件以前做不到的事：
+
+1. **证明编码器输出正确**——用 Qualcomm 官方参考解码器（openaptx PR #9 里的
+   `test-decoder.exe`，Wine 运行）解码我们经蓝牙实际发出的码流，FFT 主频正好
+   `440.0 Hz`（即播放的测试正弦），48 kHz 立体声。
+2. **证明传输层正确**——把手机抓下来的**原始帧**原样通过我们的 PipeWire/BlueZ
+   链路回放，HCI 抓包逐帧比对完全一致，RTP 头与可用的 aptX HD 完全同构。
+3. **找到并修掉真正的根因**——插件把 aptX Adaptive 的采样率位掩码写错了：
+   `44100` 写成 `0x40`（实际是 192 kHz），`96000` 写成 `0xa0`（未定义值）。
+   所以“44.1 kHz 会话”实际向耳机声明 192 kHz，却喂 44.1 kHz 帧 → 耳机静音。
 
 ---
 
@@ -19,11 +28,12 @@
 | 主机 | Intel Core Ultra 7 255HX，30 GiB DDR5 |
 | 系统 | NixOS 26.11pre，linux-zen 7.2.3 |
 | 蓝牙适配器 | Intel AX210（`FC:B3:AA:C5:01:42`），无高通控制器 |
-| 目标耳机 | Sennheiser MOMENTUM 5（`80:C3:BA:B7:16:3B`），SEP vendor `0x00d7` codec `0x00ad` |
+| 目标耳机 | Sennheiser MOMENTUM 5（`80:C3:BA:B7:16:3B`），SEP 9 vendor `0x00d7` codec `0x00ad` |
 | 参考源 1 | HONOR 90GT / Android 16（aptX Adaptive 可用）—— 手机蓝牙地址 `44:90:46:40:FD:DD` |
 | 参考源 2 | FiiO BT11 / QCC5181（aptX Lossless 可用） |
 | 编码器执行 | QEMU 11.1.0 `qemu-hexagon -cpu v68`，Hexagon clang 22.1.8 |
 | 专有 blob | `/home/baizhu945/work/aptxlibs_CPH2749/`（**不进 Nix store**） |
+| 参考工具 | `/tmp/pr9bin/archive/x86/*.exe`（Wine；见 §7 重新获取方法） |
 
 ---
 
@@ -32,312 +42,293 @@
 ```
 helper 源码    /home/baizhu945/work/openaptx/research/aptx-adaptive-qemu/aptx-lossless-helper.c
 helper 二进制  /home/baizhu945/Documents/aptx-adaptive-runtime/helper/aptx-lossless-helper
+回放诊断二进制 .../helper/aptx-lossless-helper-replay（本轮的 APTX_ADAPTIVE_REPLAY 实验用）
 PipeWire 插件  /home/baizhu945/work/pipewire/spa/plugins/bluez5/a2dp-codec-aptx-adaptive.c
+               /home/baizhu945/work/pipewire/spa/plugins/bluez5/a2dp-codec-caps.h   ← 本轮修复点
 NixOS 模块     /etc/nixos/pipewire-aptx-adaptive-module.nix
-               （可写副本 /home/baizhu945/work/nixos-aptx-fix/）
-测试脚本       /home/baizhu945/work/openaptx/build-helper/test-adaptive.sh
-               /home/baizhu945/work/openaptx/build-helper/test-helper.py
+               可写副本 /home/baizhu945/work/nixos-aptx-fix/
 参考码流       /home/baizhu945/work/phone-btsnoop/aptx-adaptive-reference-48k96k.bin (3.84 MB)
 手机 btsnoop   /home/baizhu945/work/phone-btsnoop/btsnoop_hci_*.log
-反汇编产物     /tmp/module.dis, /tmp/r3lib.dis
 构建脚本       /home/baizhu945/work/openaptx/build-helper/build-any.sh
 ```
 
----
-
-## 3. 当前系统配置（/etc/nixos/pipewire-aptx-adaptive-module.nix）
-
-```nix
-PIPEWIRE_APTX_ADAPTIVE_MODE = "r2";        # R2 CAPI wrapper（非 lossless）
-APTX_ADAPTIVE_PROFILE = "6";
-APTX_ADAPTIVE_STRIP_OTA = "1";             # ★ 剥离 8 字节内部 OTA 包装
-APTX_ADAPTIVE_CODEC_FRAMES = "1200";       # R2 帧长 = 1200 样本 (25ms@48k)
-APTX_ADAPTIVE_SOURCE_TYPE = "0x00";        # ★ 必须是 0x00，不是 0x02
-APTX_ADAPTIVE_FORCE_RATE = "48000";        # 与图时钟一致
-APTX_ADAPTIVE_CHANNEL_MODE = "stereo";     # ★ STEREO，不是 JOINT_STEREO
-APTX_ADAPTIVE_LOSSLESS = "off";
-APTX_ADAPTIVE_QHS_SUPPORT = "0";
-APTX_ADAPTIVE_ABR = "1";
-APTX_ADAPTIVE_CAPTURE = "/tmp/aptx-adaptive-reference.bin";  # sink 捕获路径
-```
-
-**另外必须设置（否则速率偏差 13.5%）**：
-```bash
-pw-metadata -n settings 0 clock.force-quantum 1200
-```
-
-**bluez5.codecs 顺序**：`aptx_hd` 排在 `aptx_adaptive` 之前（默认走可用的 aptX HD）。
+**pipewire fork 最新 rev**：`bf15869af6eb7ddcb2a653a0d6d6d2018e32bef1`（分支 master，
+已推送 github.com/baizhu945/pipewire）。
 
 ---
 
-## 4. 已修复的问题（全部验证过）
+## 3. 本轮的根因（最重要）
 
-| # | 问题 | 修复 | 证据 |
-|---|---|---|---|
-| 1 | **source type 必须是 0x00** | `APTX_ADAPTIVE_SOURCE_TYPE=0x00` | 手机 btsnoop 对比；0x02 时 `wrote:-1`，0x00 时 0 失败 |
-| 2 | **通道模式必须 STEREO** | `APTX_ADAPTIVE_CHANNEL_MODE=stereo` | 手机协商 `40 02` |
-| 3 | **PipeWire quantum 必须等于块大小** | `clock.force-quantum 1200` | quantum 2048 时喂入 54500 样本/s，1200 时 384960 B/s |
-| 4 | **R2 wrapper 的 TTP 不递增** | helper 注入单调时钟 TTP | 补丁后 TTP 每帧 +375 |
-| 5 | **R3 内核分派条件** | 加采样率检查 `mem[0x42f4]==0xac44` | 反汇编 0x137e4 |
-| 6 | **R2 帧长是 1200 样本** | `APTX_ADAPTIVE_CODEC_FRAMES=1200` | dts 恒为 1200 |
-| 7 | **R2 输出含 8 字节内部 OTA 包装** | `APTX_ADAPTIVE_STRIP_OTA=1` | 手机载荷 656B，我们修复前 664B |
-| 8 | **Lossless 只支持 44.1kHz** | Lossless 时强制 44100 | 48k 时链路停在 11 B/s |
+### 3.1 采样率位掩码错误
 
----
+Qualcomm 官方 A2DP offload 解析器 `bthost_ipc.h`
+（syberia-project/platform_hardware_qcom_bt, `bthost_ipc/bthost_ipc.h`）定义：
 
-## 5. 当前实测结果（修复后）
-
-```
-HCI 媒体包：RTP 12 + 656 = 668 字节   ✓ 与手机一致
-发送成功：wrote:668 × 918，失败 0     ✓
-缓冲排空：unsent size:0 × 1826        ✓
-速率：26.42 kB/s                      ✓ 与手机一致
-helper：读 385360 B/s，写 26964 B/s   ✓
-```
-
-**但耳机仍无声。**
-
----
-
-## 6. ⚠️ 唯一剩余差异：帧头字节 2
-
-**我们的 1713 帧：**
-```
-8300d0a1f27fff0f...    ← 字节2 = d0（1697 帧 / 99%）
-8300d2a1b9031dd0       ← 5 帧
-8300d5a1c178ff43       ← 2 帧
-```
-
-**手机参考（48kHz 段）：**
-```
-d4: 575    d2: 330    d3: 170    d5: 146
-d0: 105    d1:  62    d6:  57    d7:  18
-```
-
-**手机在 0-7 全范围变化，我们几乎恒为 0。**
-
-**推测**：字节 2 是帧类型/速率/复杂度指示，解码器据此选择解码路径。
-
----
-
-## 7. 完整帧结构（已确认）
-
-```
-A2DP 包 = RTP(12) + aptX Adaptive 帧(656)
-
-RTP: V=2, PT=96, seq++, ts += 1200
-帧:
-  字节 0-1: 83 00          ✓ 与手机一致（同步字）
-  字节 2:   d0|类型        ❌ 我们的不变化  ← 当前唯一差异
-  字节 3:   a1             ✓
-  字节 4-5: 随内容变化     ✓
-  字节 6-7: ff 0f          ✓
-  字节 8+:  编码数据       ✓（随输入变化）
-```
-
----
-
-## 8. 参考码流的获取方法（重要，可复现）
-
-**问题**：手机把 aptX 编码 offload 到控制器，btsnoop 里没有媒体包。
-
-**解决方案**：把 AX210 变成 A2DP sink，手机作为源发送 aptX Adaptive。
-
-已实现（PipeWire fork 提交 `a521ff1` + `a28341e`）：
 ```c
-/* a2dp-codec-aptx-adaptive.c */
-codec_fill_caps()    // 忽略 flags，sink 侧也广告 aptX Adaptive
-codec_init()         // SINK 标志 → 最小状态，不启动 helper
-codec_start_decode() // 解析 RTP 头
-codec_decode()       // 把已解密的载荷写入 APTX_ADAPTIVE_CAPTURE
+#define A2D_APTX_ADAPTIVE_SAMP_FREQ_MASK  (0xF8)
+#define A2DP_APTX_ADAPTIVE_SAMPLERATE_44100   (0x08)
+#define A2DP_APTX_ADAPTIVE_SAMPLERATE_48000   (0x10)
+#define A2DP_APTX_ADAPTIVE_SAMPLERATE_88000   (0x20)
+#define A2DP_APTX_ADAPTIVE_SAMPLERATE_192000  (0x40)
 ```
 
-**关键**：A2DP 链路是加密的，HCI 抓包无法解析；但 `codec_decode()` 收到的是**已解密**的载荷，直接落盘即可。
+插件里（修复前）：
 
-**操作步骤**：
-1. 手机配对 PC（`bluetoothctl` 里需要输入 `yes` 确认配对码）
-2. 手机蓝牙设置里连接 PC
-3. 手机播放音乐
-4. `/tmp/aptx-adaptive-reference.bin` 自动累积
+```c
+#define APTX_ADAPTIVE_SAMPLING_FREQ_44100  0x40   // 错：这是 192 kHz
+#define APTX_ADAPTIVE_SAMPLING_FREQ_48000  0x10   // 对
+#define APTX_ADAPTIVE_SAMPLING_FREQ_96000  0xa0   // 错：未定义
+```
 
-**注意**：手机重连时可能需要重新确认配对码（PC 侧 agent 提示）。
+后果：`APTX_ADAPTIVE_FORCE_RATE=44100` 时实际协商出 `0x40`（192 kHz），
+编码器却按 44.1 kHz 出帧（帧头字节 2 = `0xc0`），耳机按 192 kHz 解码 → 静音。
+48 kHz（`0x10`）本来就是对的，但耳机仍静音，说明还有第二层原因（见 §6）。
+
+修复后（`bf15869`）：
+
+```c
+#define APTX_ADAPTIVE_SAMPLING_FREQ_44100  0x08
+#define APTX_ADAPTIVE_SAMPLING_FREQ_48000  0x10
+#define APTX_ADAPTIVE_SAMPLING_FREQ_88200  0x20
+#define APTX_ADAPTIVE_SAMPLING_FREQ_96000  0x40
+#define APTX_ADAPTIVE_SAMPLING_FREQ_192000 0x40
+```
+
+广告能力从 `0xf0` 变为 `0x58`（44.1/48/96），与 MOMENTUM 5 的能力 `0x70`
+交集为 `0x50`（48 kHz、96 kHz）。
+
+### 3.2 耳机能力 / 手机配置（HCI 实测）
+
+从我们自己的 btmon 抓包里解出耳机 aptX Adaptive 能力（GET_CAP 响应）：
+
+```
+d7 00 00 00 ad 00 71 0a 37 6a c8 7d 64 7d 00 01 82 00 00 0f 02 03 03 03 00 aa
+                  ^^    ^^                                        ^^
+            采样率0x71 通道0x0a                              features 0x0f000082
+```
+
+手机（HONOR 90GT）发给耳机的 SET_CONFIG（手机 btsnoop 原始字节）：
+
+```
+d7 00 00 00 ad 00 40 02 50 64 64 64 ff ff 00 01 92 00 00 0f 02 03 03 03 00 aa
+                  ^^    ^^                    ^^
+            采样率0x40  通道0x02         features 0x0f000092（含 R2.2 位）
+```
+
+`0x40` 按 Qualcomm 表 = 192 kHz，但手机内容是 48k/96k，**待确认**它到底是
+96 kHz 还是 192 kHz（见 §6 下一步）。`0x92` 比我们的多一个 R2.2 位。
 
 ---
 
-## 9. 关键的反汇编发现
+## 4. 已确认正确的东西（本轮新增证据）
 
-| 地址 | 内容 |
+| 项 | 证据 |
 |---|---|
-| `0x137e4` | `capi_aptx_adaptive_enc_process_wrapper`：仅当 `mem[0x24d]==3` **且** `mem[0x42f4]==0xac44` 才走 R3 内核 |
-| `0x4550` | `capi_aptx_adaptive_enc_process`：输入读取在 `0x4650`（`stream+0x10 → buf_ptr`，`buf+0x4 → actual_data_len`） |
-| `0x9bc0` | `deferred_rhs_process`：`aptX3Encode(ctx, in_desc, out_desc)` 调用点 |
-| `0x14dc0` | `calcTTPAdj` |
-| `0x1588c` | `incTtp` |
-
-**CAPI 输入结构（已确认匹配）**：
-```c
-capi_stream_data_v2_t {
-    +0x00  flags         // bit1 必须置位（CAPI_STREAM_V2=2）
-    +0x08  timestamp
-    +0x10  buf_ptr       // ← 模块读这里
-    +0x14  bufs_num
-    +0x18  metadata_list_ptr
-}
-capi_buf_t {
-    +0x00  data_ptr
-    +0x04  actual_data_len  // ← 模块读这里
-    +0x08  max_data_len
-}
-```
+| **编码器输出可被官方解码器正确解码** | `test-decoder.exe` 解我们实际发出的码流 → 48 kHz 立体声、FFT 主频 **440.0 Hz** |
+| **编码器 44.1 kHz 输出也有效** | 同法解码 → 44100 Hz、主频 ~440 Hz |
+| **传输层逐帧正确** | 回放手机原始帧，HCI 抓包比对 `matches secA frame 790/791/...` 全部命中 |
+| **RTP 头与可用的 aptX HD 同构** | 两者都是 `80 60 <seq> <ts> 00000000`，PT=96、SSRC=0、seq/ts 递增正常 |
+| **AVDTP 信令完整** | DISCOVER → GET_ALL_CAP → **SET_CONFIG** → OPEN → **START** 全部被耳机 ACCEPT |
+| **量化时钟正确** | `clock.force-quantum 1200`；RTP ts 每帧 +1200（25 ms@48k） |
+| **耳机只连电脑** | 用户确认，排除多点连接 |
 
 ---
 
-## 10. 诊断工具（已就绪）
+## 5. 诊断工具（本轮新增，非常有价值）
+
+### 5.1 Qualcomm 官方参考工具（Wine）
+
+从 openaptx **PR #9** 取（`archive/x86/*.exe`，PE32 Windows 控制台程序）：
 
 ```bash
-# 1. helper 协议级测试（无蓝牙）
-cd /home/baizhu945/work/openaptx/build-helper
-export LD_LIBRARY_PATH=$(paste -sd: /tmp/hostlibs.txt)
-python3 test-helper.py --blocks 30 48k 44k-r22 r3-48k
+# 重新获取（PR #9 的 patch 含二进制 blob）
+curl -sL https://github.com/arkq/openaptx/pull/9.patch -o /tmp/pr9.patch
+mkdir -p /tmp/pr9bin && cd /tmp/pr9bin && git init -q && git apply /tmp/pr9.patch
 
-# 2. 端到端稳定性测试（自动重连+选 profile+测量）
-./test-adaptive.sh 3
+export WINEPREFIX=/tmp/wineprefix-aptx WINEDEBUG=-all
+W=/tmp/pr9bin/archive/x86
 
-# 3. 抓包并解析我们发出的帧
-sudo btmon -w /tmp/x.hci          # 然后播放
-TS=/nix/store/fy4pvbxfj8nj9f9pfq31i67vdp7n9csd-wireshark-cli-4.6.8/bin/tshark
-CID=$($TS -r /tmp/x.hci -T fields -e btl2cap.cid | sort | uniq -c | sort -rn | head -3 | awk '{print $2}' | grep -v '^$' | head -1)
-$TS -r /tmp/x.hci -Y "btl2cap.cid==$CID" -T fields -e btl2cap.payload | head -20
+# 1) 码流清洗（关键：aptX Adaptive 帧必须先做 16-bit 字节交换，用 -e）
+wine $W/aptx-adaptive-packet-header-strip_NEW_BYTE_SWAP.exe -e -d outdir stream.bin
 
-# 4. helper 内部状态 dump（需要在 helper 里加 APTX_DUMP_R2_STATE）
+# 2) 解码成 WAV
+wine $W/test-decoder.exe -i outdir/stream-clean.bin -o out.wav -x hq
+
+# 3) 其余工具
+wine $W/ax3-test-decoder.exe -i ... -o ... -x hq     # R3/v3 解码器
+wine $W/test-stream-deinterleave.exe -d dir stream.bin
+wine $W/slimbus2aptx-adaptive3.exe -d dir -r 48000 stream.bin
 ```
 
-**重新构建 helper**：
+**注意**：`aptx-adaptive-packet-header-strip` 不加 `-e` 会在 ~9 帧后丢失同步；
+加 `-e` 后整段通过（0 sync losses）。这说明参考解码器期望的是字节交换后的形式，
+而手机/我们的线上码流是同一种（未交换）形式。
+
+### 5.2 回放诊断（`APTX_ADAPTIVE_REPLAY`）
+
+helper 新增：设 `APTX_ADAPTIVE_REPLAY=<file>` 时，每个音频请求返回文件里的
+664 字节 OTA 记录（8 字节传输头 + 656 字节 codec 帧），跳过编码器。
+用来把**手机原始帧**塞进同一条 PipeWire/BlueZ 链路。
+
+构造回放文件（把手机的 656 字节帧加上 8 字节 OTA 头）：
+
+```python
+d=open('aptx-adaptive-reference-48k96k.bin','rb').read()
+out=bytearray()
+for i in range(3868,5852):           # secB = 解码器判定的 48 kHz 段
+    ttp=(i*375)&0xffff
+    out+=bytes([ttp&0xff,(ttp>>8)&0xff,0x64,0x01,0x00,0x00,0x00,0xae])+d[i*656:(i+1)*656]
+open('/tmp/replay.bin','wb').write(out)
+```
+
+### 5.3 抓包与分析
+
 ```bash
-cd /home/baizhu945/work/openaptx/build-helper
-export LD_LIBRARY_PATH=$(paste -sd: /tmp/hostlibs.txt)
-./build-any.sh /home/baizhu945/work/openaptx/research/aptx-adaptive-qemu/aptx-lossless-helper.c /tmp/helper-new
-cp /tmp/helper-new /home/baizhu945/Documents/aptx-adaptive-runtime/helper/aptx-lossless-helper
+# 抓包（必须用 setuid 的 /run/wrappers/bin/sudo，PATH 里的 sudo 不是 setuid）
+echo 'wcandxl' | /run/wrappers/bin/sudo -S btmon -w /tmp/x.hci
+TS=$(ls /nix/store/*wireshark-cli*/bin/tshark | head -1)
+
+# 媒体 CID 与载荷
+$TS -r /tmp/x.hci -T fields -e btl2cap.cid -e btl2cap.payload | awk -F'\t' 'length($2)>200{print $1}' | sort | uniq -c
+# AVDTP 信令序列
+$TS -r /tmp/x.hci -Y "btavdtp" -T fields -e frame.number -e btavdtp.signal_id -e btavdtp.message_type | awk -F'\t' '$2!="0x20"'
+# 某帧原始字节
+$TS -r /tmp/x.hci -Y "frame.number==269" -x
 ```
 
-**修改 NixOS 模块后**：
+### 5.4 系统状态操作
+
 ```bash
-# 1. 改可写副本
-vim /home/baizhu945/work/nixos-aptx-fix/pipewire-aptx-adaptive-module.nix
-# 2. 语法检查
-nix-instantiate --parse /home/baizhu945/work/nixos-aptx-fix/pipewire-aptx-adaptive-module.nix
-# 3. 复制回 /etc/nixos（sudo 密码 wcandxl）
-echo 'wcandxl' | sudo -S cp /home/baizhu945/work/nixos-aptx-fix/pipewire-aptx-adaptive-module.nix /etc/nixos/
-# 4. 重建
-sudo nixos-rebuild switch
+export PATH=/run/current-system/sw/bin:$PATH
+# 重连并选 aptX Adaptive（脚本已就绪）
+/tmp/setup_adaptive.sh          # 断开→等16s→重连→set-profile 131093→打印协商配置
+# 运行时用 systemd drop-in 改实验参数（注意必须排在 overrides.conf 之后，故用 zz- 前缀）
+mkdir -p ~/.config/systemd/user/wireplumber.service.d
+cat > ~/.config/systemd/user/wireplumber.service.d/zz-aptx-rate.conf <<'EOF'
+[Service]
+Environment=APTX_ADAPTIVE_FORCE_RATE=96000
+EOF
+systemctl --user daemon-reload && systemctl --user restart pipewire.socket pipewire wireplumber
 ```
+
+**坑**：`~/.config/systemd/user/<svc>.service.d/` 里的 drop-in 按文件名排序，
+NixOS 生成的 `overrides.conf` 排在 `a*` 之后，所以必须用 `zz-` 前缀才能覆盖。
 
 ---
 
-## 11. 下一步（按优先级）
+## 6. 本轮实测矩阵（修复常量并重建后）
 
-### A. 找出字节 2 的控制点 ⭐ 最高优先
-1. 在 helper 里加 `APTX_DUMP_R2_STATE`，dump `module_memory` 的 0x200-0x300 区间
-2. 对比手机参考码流的字节 2 序列，找出编码它的状态字段
-3. 检查 `config.profile = 0x1000`（HIGH_QUALITY）是否被正确应用
-4. 检查 `min_sink_buffer[3] = {20,20,20}` / `max_sink_buffer[3] = {50,50,50}` 是否需要调整
+| # | 协商配置（byte6/7/features） | 帧来源 | 结果 |
+|---|---|---|---|
+| 1 | `0x40 02 12`（修复前，误当 44.1k） | 我们的 44.1k 帧 | 静音 |
+| 2 | `0x10 02 12`（48k） | 我们的 48k 帧 | 静音 |
+| 3 | `0x10 02 12`（48k） | **手机原始 48k 帧**（回放） | 静音 |
+| 4 | `0x40 02 92`（修复前，误当 44.1k+R2.2） | 手机原始帧 | 静音 |
+| 5 | `0x10 02 92`（修复后，48k+R2.2） | 我们的 48k 帧 | 静音 |
+| 6 | `0x40 02 12`（修复后，96k） | 我们的 96k 帧 | 静音 |
+| — | aptX HD（同一链路、同一 RTP 头） | — | **正常出声** |
 
-### B. 检查 IMCL quality level 是否生效
-- 已知 `send_imcl_quality_level(state, 5)` 调用成功但无效果
-- 可能需要先发送其他 IMCL 消息（如 sideband 配置）
+补充事实：
 
-### C. 用解码库验证码流
-- `libaptXAdaptiveDec4.so` 有 `aptX4Decode_Create` / `AxStreamDecode`
-- 用它对我们的码流和手机码流解码，比较 PCM 输出
-- **如果能解码我们的码流但输出错误 → 编码器问题；如果解码失败 → 码流格式问题**
-
-### D. 尝试 R3 路径
-- R3 直编路径的载荷随输入变化（已验证）
-- 但帧头是 `8b` 开头，与手机的 `83` 不同
-- 且 R3 需要 Lossless 协商
-
----
-
-## 12. 有效的对照数据
-
-**手机 48kHz 静音帧**：
-```
-8300d0a1fc7fff0f9f9f9fff9fff9fff9fff93ff8080000000...
-```
-
-**手机 48kHz 音频帧**（同一首歌）：
-```
-8300d5a1f57c8ceffbae...
-8300d4a19e004e800fe1...
-8300d4a1de0dcf868cc9...
-8300d2a17d802f4363e0...
-8300d3a19e804f003df8...
-```
-
-**我们的静音帧**：
-```
-8300d0a1fc7fff0f879fc0fff9fffff9f9ffffff...
-```
-
-**我们的音频帧**（440Hz 正弦）：
-```
-8300d0a1f27fff0f879fffffff0fef9fb9a6e8a44bf7b438...
-8300d0a1f27fff0f879fffffff0fee9f816e680a69e03732...
-```
+- R2 wrapper 的真实帧长实测就是 **1200 样本/帧**（喂 600/672/1200 样本块，
+  输出都稳定在 1200 样本一帧），即 48 kHz 下 25 ms。所以帧率不是问题。
+- **helper 的 96 kHz 模式有 bug**：配置 `encoder_rate=96000`（selector 0）时，
+  输出帧头仍是 `8300d0a1`，用参考解码器解出来是 **48000 Hz**（输入 1000 Hz →
+  解出 504 Hz）。手机真正的 96 kHz 段帧头是 `8300b0a1`。这说明
+  `capi_rate_selector()` 把 96000 映射到 selector 0 并不产生真正的 96 kHz 码流，
+  需要重新确认 selector 与采样率的对应关系（Qualcomm 官方把 88000/192000 都映射
+  到 0）。
+- 耳机能力 `0x71` 按 Qualcomm 表 = 采样率位 `0x70` = {0x10, 0x20, 0x40}
+  = {48k, 88.2k, 192k}（没有 44.1k、没有 96k）。手机 SET_CONFIG 选 `0x40`
+  → 很可能是 **192 kHz**。我们的编码器目前只能出 48k/44.1k 的码流。
 
 ---
 
-## 13. 已知的坑
+## 7. 下一步（按优先级）
 
-1. **手机 btsnoop 路径**：`/data/log/bt/`（世界可读），不是 `/data/misc/bluetooth/logs/`（需 root）
-2. **配对需要 PC 侧确认**：`bluetoothctl` 会提示 `Confirm passkey XXXXXX (yes/no)`，必须输入 `yes`
-3. **SDP 缓存**：耳机断开后需等 ≥15 秒再重连才会重新查询 SDP
-4. **MOMENTUM 5 多点连接**：A2DP 同一时刻只给一个设备
-5. **helper PID 获取**：必须用 `pgrep -x qemu-hexagon`，不要 `pgrep -f`（会匹配到自己的命令）
-6. **测量前必须验证**：以 aptX Adaptive 连接 + 输出选择正确
-7. **A2DP 链路加密**：HCI 抓包无法解析，必须用 sink 回调捕获
-8. **`br-connection-abort-by-local`**：重连失败时先 `disconnect` 等 16 秒再 `connect`
+### A. 打通真正的 192 kHz 编码路径 ⭐ 最高优先
+证据链指向：手机用 `0x40`（192 kHz）与耳机通信，耳机能力里也只有
+48k/88.2k/192k。要做的是：
+
+1. 在 helper 的 `capi_rate_selector()` 里增加 192000（和 88200）分支，
+   并确认 CAPI `sampling_rate` 字段对 192k 的取值（Qualcomm 表里 192000→0，
+   与 88000 相同，需要实验确认）。
+2. 用参考解码器验证输出帧头变成 `8300b0a1`（96k 族）或 192k 对应值，
+   且解出的 WAV 采样率正确。
+3. 在插件的 `adaptive_rates[]` 里把 192000 的 codec_rate 改成 192000
+   （当前是 96000 下采样）。
+
+### B. 用手机作对照源抓 RTP 头 / 时序
+让手机作为 A2DP 源连电脑并播放，用 btmon 抓包，逐字节对比手机 RTP 头、
+每帧间隔（是否真的 25 ms）与 AVDTP 时序。
+
+### C. 确认 headphone 能力的真实语义
+如果能找到 MOMENTUM 5 的固件或 aptX Adaptive 解码器字符串，确认 `0x71`
+的采样率位到底是 {48k,88.2k,192k} 还是 {48k,96k,192k}。
+
+### D. 检查是否存在厂商专有控制通道
+aptX Adaptive 的 IMCL / sideband 反馈可能走独立的 L2CAP PSM；对比手机
+btsnoop 里除 AVDTP 之外的控制通道。
 
 ---
 
-## 14. 相关提交
+## 8. 参考数据
 
-**pipewire fork**（`github.com/baizhu945/pipewire`，branch master）：
+**手机 48 kHz 段（secB，解码器判定 48 kHz 立体声，1984 帧）帧头分布**：
 ```
+0xd0:111  0xd1:83  0xd2:512  0xd3:226  0xd4:765  0xd5:178  0xd6:84  0xd7:25
+```
+
+**手机 96 kHz 段（secA，解码器判定 96 kHz 单声道，3868 帧）帧头分布**：
+```
+0xb0:556  0xb1:755  0xb2:82  0xb3:1275  0xb4:785  0xb5:415
+```
+
+**我们的 48 kHz 编码输出帧头**：`8300d0a1 ...` 起，字节 2 = `d0..d4`（与 secB 同族）。
+
+**我们的 44.1 kHz 编码输出帧头**：`8300c0a1 ...`。
+
+**回放验证**：HCI 抓包中的 RTP 载荷与 `replay_secA.bin` 的第 790/791/... 帧
+逐字节相等；RTP = `80 60 <seq:2> <ts:2+2> 00 00 00 00`，ts 每帧 +1200。
+
+---
+
+## 9. 相关提交
+
+**pipewire fork**（`github.com/baizhu945/pipewire`，master）：
+```
+bf15869  bluez5: fix the aptX Adaptive sampling-frequency bitmask   ← 本轮根因修复
 6b4b2f0  bluez5: optionally strip the R2 CAPI OTA wrapper on wire
 a28341e  bluez5: dump the decrypted aptX Adaptive payload from the capture sink
 a521ff1  bluez5: add a capture-only aptX Adaptive sink
-a1aaee5  bluez5: add APTX_ADAPTIVE_CODEC_FRAMES diagnostic override
-a28c616  bluez5: add APTX_ADAPTIVE_SOURCE_TYPE diagnostic override
-eff3adf  bluez5: add APTX_ADAPTIVE_FORCE_RATE diagnostic override
-3998394  bluez5: force 44.1 kHz when aptX Lossless is enabled
-fbf3dec  bluez5: prefer JOINT_STEREO + channel-mode override
-90cb7d7  bluez5: use 720-sample blocks for R3
-a468a7a  bluez5: drop the R3 rate/format restrictions
-47eaf64  bluez5: remove the R3 48 kHz restriction
 ```
 
-**openaptx fork**（`github.com/baizhu945/openaptx`，branch `research/aptx-adaptive`）：
-- 已向上游提交 PR #15（`arkq/openaptx`），包含状态报告和求助
+**openaptx fork**（`github.com/baizhu945/openaptx`，`research/aptx-adaptive`）：
+```
+fe5d973  helper: add a reference-bitstream replay diagnostic        ← 本轮
+bcd5c80  research: handoff report for the aptX Adaptive bridge
+e5d2be3  research: status report for aptX Adaptive/Lossless on a non-Qualcomm host
+```
+
+**上游**：openaptx PR #15（状态报告）、PR #12（parser + QEMU adapter）、PR #9（参考工具）。
 
 ---
 
-## 15. 其他文档
+## 10. 恢复到可用状态
 
-- `/home/baizhu945/work/kalimba/EDKCS-FORMAT.md` — EDKCS 容器格式（已破译）
-- `/home/baizhu945/work/kalimba/BT11-FIRMWARE-MAP.md` — BT11 固件分区图 + 15 个 DSP 镜像
-- `/home/baizhu945/work/openaptx/research/aptx-adaptive-qemu/STATUS.md` — 英文状态报告（PR 用）
+aptX HD 100% 可用（实测 `wrote:894` × 684，0 失败）。若实验失败：
+
+1. 删除实验用 systemd drop-in：
+   `remove-without-permission ~/.config/systemd/user/{pipewire,wireplumber}.service.d/zz-*.conf`
+2. `systemctl --user daemon-reload && systemctl --user restart pipewire.socket pipewire wireplumber`
+3. `wpctl set-profile <card> 131079`（aptX HD）或重连耳机走默认。
+
+模块里 `bluez5.codecs` 已把 `aptx_hd` 排在 `aptx_adaptive` 之前，默认即走 HD。
+
+---
+
+## 11. 其他文档
+
+- `/home/baizhu945/work/openaptx/research/aptx-adaptive-qemu/STATUS.md` — 英文状态报告
 - `/home/baizhu945/work/openaptx/research/aptx-adaptive-qemu/gen-cntr-process-loop.md` — AudioReach gen_cntr 数据通路分析
-
----
-
-## 16. 恢复到可用状态
-
-如果实验失败，恢复到 aptX HD（100% 可用）：
-
-```nix
-# /etc/nixos/pipewire-aptx-adaptive-module.nix
-# 把 aptx_hd 放在 bluez5.codecs 列表最前（已默认如此）
-```
-
-然后重连耳机即可。aptX HD 实测 `wrote:894` × 684，0 失败。
+- `/home/baizhu945/work/kalimba/EDKCS-FORMAT.md`、`BT11-FIRMWARE-MAP.md`
