@@ -1,10 +1,7 @@
 /*
  * [open]aptx - aptx-adaptive-stream.c
- * Copyright (c) 2026 Arkadiusz Bokowy contributors
- *
- * This file is a part of [open]aptx.
- *
- * This project is licensed under the terms of the MIT license.
+ * SPDX-FileCopyrightText: 2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
  */
 
 #include <errno.h>

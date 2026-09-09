@@ -2,6 +2,9 @@
  * Compatibility symbols for the proprietary Qualcomm Hexagon module used by
  * the research-only QEMU helper.  This file is not part of the aptX codec and
  * does not contain Qualcomm codec code.
+ *
+ * SPDX-FileCopyrightText: 2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
  */
 
 #include <stddef.h>

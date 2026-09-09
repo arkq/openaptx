@@ -1,4 +1,8 @@
 /*
+ * [open]aptx - aptx-lossless-helper.c
+ * SPDX-FileCopyrightText: 2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
+ *
  * Research helper for the proprietary Qualcomm aptX Adaptive CAPI module.
  *
  * This is a host-agnostic stdin/stdout adapter.  The Qualcomm Hexagon module

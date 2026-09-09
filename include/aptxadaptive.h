@@ -2,7 +2,8 @@
  * @file aptxadaptive.h
  * @brief Research-only parser for the aptX Adaptive OTA transport header.
  *
- * This project is licensed under the terms of the MIT license.
+ * SPDX-FileCopyrightText: 2026 [open]aptx developers
+ * SPDX-License-Identifier: MIT
  *
  * The parser describes the eight-byte transport header observed in Qualcomm
  * Adaptive R2 and R3 encoder output. It does not implement the aptX Adaptive

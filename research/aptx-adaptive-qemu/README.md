@@ -34,8 +34,14 @@ controller that does not implement it.
 
 The host can also feed 88.2 kHz and 192 kHz graph streams by supplying the
 corresponding exact 2:1 down-converted PCM to the helper: 88.2 kHz maps to the
-R2 44.1 kHz mode and 192 kHz maps to the R2 96 kHz mode. The helper itself
-always receives 672 codec frames per audio request.
+R2 44.1 kHz mode and 192 kHz maps to the R2 96 kHz mode. The number of codec
+frames per audio request follows the R2 wrapper's own frame length, which is
+rate dependent (1102 samples at 44.1 kHz, 1200 at 48 kHz, 1920 at 96 kHz); the
+host block size must match it, otherwise the wrapper only produces a packet
+every other call and the RTP timestamp drifts against the codec frames.
+
+See `STATUS.md` for the current end-to-end status, the protocol findings and the
+list of hypotheses that have been ruled out by measurement.
 
 The PipeWire bridge derives the 11-byte R2/R2.2 extension stream from the
 negotiated Qualcomm A2DP codec information (including the peer feature mask
@@ -149,13 +155,11 @@ the bogus advance (or correcting it as above) unblocks the stream:
 | R2.2 Lossless @44.1 kHz | stalls after 7 packets | 1945 packets in 2000 calls |
 | R2 lossy @48/96 kHz | unchanged (224 packets) | unchanged |
 
-Open issue: the R3/Lossless kernel now runs continuously but its output settles
-into a small set of repeated frames (3 distinct payloads at 48 kHz, 5 at
-44.1 kHz) instead of tracking the input.  The ordinary R2 path produces one
-unique payload per packet.  Note that the reference stream saved by the
-earlier standalone R3 probe (`capi3-stream.aptx3`) shows the same behaviour
-(3 distinct payloads out of 6), so this is not a regression introduced by the
-cursor fix; it points at a missing container-side mechanism in the R3 path.
+With the cursor fix in place the R3 kernel runs continuously and its output is
+input dependent (a sine and a noise input produce different payloads).  The R2
+CAPI wrapper, which is the path used for ordinary aptX Adaptive, produces one
+packet per 1200-sample call at 48 kHz and is the configuration the host
+actually transmits.
 
 The `EOVERFLOW` guard is kept as a safety net in case a cursor ever approaches
 the allocation end again.
