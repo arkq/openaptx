@@ -503,14 +503,47 @@ BIT_RATE_LEVEL_MAP 1..7 Selected Level/Period/PCMinterval ...   # map 确实被�
 
 ### 13.7 下一步（第四轮，按优先级）
 
-1. **验证 R2.2（0xaf）版本假设** ⭐：手机→耳机 SET_CONFIG 的 features 是
-   `0x0f000092`（含 R2.2 位），手机→电脑是 `0x0f000017`（无 R2.2 位）。
-   我们回放的正是手机→电脑的 **0xae（R2）** 帧。若耳机按 R2.2 模式期望
-   **0xaf** 帧/或 channel_mode 0xa0，就会拒收。验证方法：
-   - 用 `test-decoder.exe` 解 version=0xaf 的样本看它是否接受；
-   - 用模块的 lossless=AUTO 路径（44.1k/S16/mtu≥768/features 0x92）产出的
-     768 B/`channel_mode=0xa0` 包，改 OTA 版本为 0xaf 后回放。
-2. **让 wrapper 别再钉 25 ms**：继续用模块日志 + 反汇编找 `me->period` 的写入点
+**⭐ 13.7.0 本轮最后的关键发现：OTA 版本字节由等级决定（0xae ↔ 0xaf）**
+
+反汇编 `encLevelHqStateMachine`（模块内 0x12eb0 起）得到：
+
+```
+r3 = level - 6
+r4 = 0xae                        ; 默认版本 = R2
+if (level-6) > 9  -> 保持 0xae
+else switch(level-6):            ; level 6..15 全部
+    memb(state+0x231) = 0xaf     ; 版本改成 R2.2
+    ...
+```
+
+即 **等级 ≥6 时 wrapper 才发 0xaf（R2.2）包**，否则发 0xae（R2）。
+而 R2.2 的包格式也不同：等级表（48k 表 @0x2097C，每项 4 字节）给出
+`{0x02, period_hi, period_lo, packet_type=5}`，**packet_type 5 = 760 字节**，
+加 8 字节 OTA 正好 **768 字节**（= helper 里的 `R2_2_LOSSLESS_OBSERVED_PACKET_SIZE`）。
+实测 lossless=AUTO（44.1k/S16/mtu≥768/features 0x92）已经能产出
+`ota=41 6f 70 05 a0 00 00 ae`（768 字节、channel_mode 0xa0、period 0x70），
+**只差版本字节不是 0xaf**。
+
+链路证据完全吻合这个假设：
+
+| 会话 | features | 期望帧 |
+|---|---|---|
+| 手机→耳机（可用） | `0x0f000092`（含 R2.2 位） | 0xaf / 768 B |
+| 手机→电脑（抓包） | `0x0f000017`（无 R2.2 位） | 0xae / 664 B |
+| 我们（现在） | `0x0f000092`（宣称 R2.2） | **0xae / 664 B ← 不匹配！** |
+
+**所以最可能的静音根因：我们向耳机声明了 R2.2，却发 R2 帧。**
+两种修法：
+1. 把等级顶到 6/7，让 wrapper 自己发 0xaf（需要搞清楚 br_level 的钳位：
+   日志显示我们送 level 7，模块内部只认 `br_level = 3`）；
+2. 先做**最小验证**：把 helper 输出记录的 `packet[7]` 改成 0xaf（或改用
+   lossless=AUTO 的 768 B 包再改版本字节）回放，听耳机是否出声。
+
+### 13.7.1 其他待办
+
+1. 搞清楚 IMCL `br_level` 为什么被钳到 3（0x7888 起的处理代码），
+   以及 `setEncoderCfgVals Inside tblidx for 2.0 mode is %d`（实测 1）。
+2. 让 wrapper 别再钉 25 ms：继续用模块日志 + 反汇编找 `me->period` 的写入点
    （`capi_aptx_adaptive_enc_process_wrapper` 附近）。
 3. 若 1/2 都不成立，考虑**绕过 R2.2 wrapper 直接调用内层 R2 编码器**
    （helper 已经用 `dlsym` 拿到 `aptXEncode_SetBitRate`，找它的 Encode 入口）。
