@@ -836,3 +836,84 @@ PROCESS(): OUTPUT_BUFFER_HEADER written, me->period = 100   # 0x64 = 25 ms
   而两个能出声的源（HONOR 90GT、FiiO BT11）都是**高通控制器 + AD offload**。
 - ⚠️ 因此“换一个非 Intel 的蓝牙棒”**不能**区分“Intel 特有毛病”与“必须是高通源”；
   要区分必须用**高通控制器**的适配器（换 Realtek/CSR 仍失败则说明是高通源依赖）。
+
+---
+
+## 16. 第六轮：BT11 判定实验 + 首次产出真正的 R2.2/R3 包形（2026-09-10 上午）
+
+### 16.1 BT11 能否当“高通控制器”用？——**不能**
+
+用户把 FIIO BT11 插到本机并连上耳机（默认协商为 **aptX Lossless**），本机蓝牙关闭。
+`lsusb` / USB 描述符实测：
+
+```
+0a12:4007  FIIO BT11 (UAC1.0)   bNumConfigurations=1  bDeviceClass=0
+  iface 0: HID      1 endpoint  (consumer control / hidraw9)
+  iface 1: HID      2 endpoints (IN+OUT, 厂商自定义 = hidraw10)
+  iface 2: Audio    Control
+  iface 3: Audio    Streaming, 两个 altset（384 B / 576 B 包）
+```
+
+- **没有任何 Wireless(0xE0) 接口** → 不提供 HCI 传输，`btusb` 无法绑定，
+  也就**不能把 BT11 当作本机的蓝牙控制器**。这条“不用买硬件就能拿到高通控制器”
+  的路走不通。
+- 厂商 HID 通道（Usage Page `0xFF00`）有 report ID 1/2/3/4/5/6/7/8/9
+  （62 / 12 / 11 / 446 字节等）——这是 FiiO 上位机/DFU 协议；**空闲时设备不主动上报**
+  （读 hidraw10 五秒零数据），需要按协议轮询。
+- 结合 §16.2 的固件映射：BT11 的链路逻辑在**主机固件分区**（熵 7.07、无字符串、
+  非 ARM/XAP 可识别代码）里，改造它加 HCI 模式不现实。
+- BT11 在本机呈现为 PipeWire sink（设备 94 “Mpow HC5 …”，= 0a12:4007 的 UAC 口），
+  所以“PC → BT11 → 耳机”这条外接路径可用（但不是本项目要的路径）。
+
+### 16.2 关键收获：本机第一次产出真正的 768 B / ptype 5 包
+
+用 `helper_probe.py` 直接驱动 helper（`/tmp/probe6.py`、`/tmp/probe7.py`）扫参数，
+发现之前 all “lossless 实验”其实**都没有真正进入 2.2/Lossless 形态**，原因有两个：
+
+1. helper 里有降级闸门：`lossless=force` 且 mode≠R3 时，**除非**
+   `APTX_ADAPTIVE_ALLOW_UNSTABLE_LOSSLESS=1`，否则会把 `lossless_mode` 改回 OFF
+   （并打印 “downgrading to ordinary aptX Adaptive”）。→ 之前的 lossless 配置全都
+   静默退化成普通 R2（664 B / ptype 1 / `0xae`）。
+2. 2.2/Lossless 形态**要求源字长提示为 16 bit**：同一配置下 `bits=32` 出
+   **664 B（R2 形态）**、`bits=16` 才出 **768 B（ptype 5、chan 0xa0）**。
+
+修正后的实测（44.1 kHz、CIE 44.1k stereo f92）：
+
+| 配置 | 输出 |
+|---|---|
+| `mode=2 lossless=force qhs=1 bits=16` | **768 B**，OTA `.. 90 05 a0 00 00 ae`，帧头 **`21 87`**（R3 形态） |
+| 同上 + `APTX_OTA_VERSION=0xad` | **768 B**，OTA `.. 90 05 a0 00 00 ad` ← 与 BT11 的 Lossless 形态一致 |
+| 同上 + `APTX_OTA_VERSION=0xaf` | **768 B**，OTA `.. 90 05 a0 00 00 af` ← R2.2 形态 |
+| `bits=32` 同配置 | 664 B（R2 形态，`83 00 ..`） |
+
+顺带修掉/查明两个真 bug：
+
+- R3 入口的静态属性用的是 R2 入口的 `capi_aptx_adaptive_enc_get_static_properties`，
+  应为 `aptx_adaptive3_enc_get_static_properties`（已修，见 `/tmp/helper_r3fix.c`）。
+- `aptx_adaptive3_enc_init` + `set_profile` 只接受 **profile ∈ {2, 3, 6}**（0 视作 6），
+  其它值（1/4/5/0x1000）直接 `EIO` 让整个 config 失败。
+
+### 16.3 新增的两个运行期开关（helper 侧，禁用时完全无副作用）
+
+```c
+APTX_OTA_VERSION=0xNN   /* 覆盖 OTA 版本字节：0xad=R3、0xaf=R2.2、0xae=R2 */
+APTX_FORCE_BITS=16|32   /* 覆盖交给 2.2 状态机的源字长提示 */
+```
+
+实验 helper 已装到运行时目录（**不覆盖**原 helper）：
+`/home/baizhu945/Documents/aptx-adaptive-runtime/helper/aptx-lossless-helper-exp`，
+配套 drop-in 暂存于 `/tmp/zzz-aptx-losstest.conf`（含
+`APTX_ADAPTIVE_LOSSLESS=force`、`APTX_ADAPTIVE_QHS_SUPPORT=1`、`APTX_FORCE_BITS=16`、
+`APTX_OTA_VERSION=0xad`），**尚未启用**。
+
+### 16.4 下一步
+
+把上面三种“与 BT11 同形”的流真正放到空口上试（需要耳机空闲 + 本机蓝牙开启）：
+
+1. `0xad`（R3/Lossless 形态，与 BT11 相同）——第一次测，最有信息量；
+2. `0xaf`（R2.2 形态，普通 Adaptive 的 Snapdragon Sound 变体）；
+3. 对照组仍是 `0xae`（R2 形态，已知静音）。
+
+判定逻辑：若 `0xad`/`0xaf` 出声而 `0xae` 不出声 → 耳机只吃 Snapdragon Sound
+包形，问题不在链路而在**包形/版本**，普通 AD 就需要把 wrapper 顶到等级 ≥6（§13.7.0）；
+若三者都静音 → 差异确定在控制器/空口层（§13.13）。
