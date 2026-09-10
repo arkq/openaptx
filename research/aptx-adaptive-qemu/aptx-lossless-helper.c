@@ -99,6 +99,8 @@ extern capi_err_t capi_aptx_adaptive_enc_get_static_properties(
 		capi_proplist_t *init_set_proplist, capi_proplist_t *static_proplist);
 extern capi_err_t aptx_adaptive3_enc_init(capi_t *module,
 		capi_proplist_t *init_set_properties);
+extern capi_err_t aptx_adaptive3_enc_get_static_properties(
+		capi_proplist_t *init_set_proplist, capi_proplist_t *static_proplist);
 extern capi_vtbl_t *get_aptx_adaptive3_vtable(void);
 
 typedef int (*set_bitrate_fn)(void *encoder, uint32_t bitrate);
@@ -857,7 +859,14 @@ static int query_static_properties(struct helper_state *state)
 	props[5].payload.max_data_len = sizeof(fwe);
 #undef QUERY
 
-	err = capi_aptx_adaptive_enc_get_static_properties(&state->init, &list);
+	/* The R3 entry point has its own static-property implementation; asking the
+	 * R2 CAPI wrapper about the R3 kernel reports the wrong memory requirement
+	 * and makes aptx_adaptive3_enc_init() fail with EIO. */
+	if (state->mode == APTX_ADAPTIVE_HELPER_MODE_R3)
+		err = aptx_adaptive3_enc_get_static_properties(&state->init, &list);
+	else
+		err = capi_aptx_adaptive_enc_get_static_properties(&state->init,
+				&list);
 	if (err != CAPI_EOK)
 		return -EIO;
 
@@ -919,6 +928,48 @@ static int r3_direct_setup(struct helper_state *state);
 static int process_audio_direct_r3(struct helper_state *state, const uint8_t *pcm,
 		size_t pcm_size, uint8_t packet[MAX_PACKET_SIZE], size_t *packet_size);
 
+/* TTP sources.  The encoding timeline is the only domain with a defined
+ * relation to the RTP timestamps the host generates: "audio" derives TTP from
+ * the number of encoded samples plus a fixed playback offset, so TTP and the
+ * RTP timestamp stay in step.  "wall" reproduces the historical
+ * CLOCK_MONOTONIC value, whose absolute value has no relation to the audio
+ * timeline at all.  Selected with APTX_TTP_MODE (default: audio). */
+enum ttp_mode {
+	TTP_MODE_AUDIO = 0,
+	TTP_MODE_WALL,
+};
+
+static uint64_t ttp_audio_samples;
+static uint32_t ttp_audio_offset = 3900;	/* 260 ms: the sink's DELAY_REPORT */
+static enum ttp_mode ttp_mode = TTP_MODE_AUDIO;
+
+static void ttp_configure(void)
+{
+	const char *mode = getenv("APTX_TTP_MODE");
+	const char *offset = getenv("APTX_TTP_OFFSET");
+
+	ttp_audio_samples = 0;
+	ttp_audio_offset = 3900;
+	ttp_mode = TTP_MODE_AUDIO;
+	if (mode != NULL && *mode != '\0') {
+		if (strcmp(mode, "wall") == 0 || strcmp(mode, "host") == 0)
+			ttp_mode = TTP_MODE_WALL;
+		else if (strcmp(mode, "audio") != 0)
+			fprintf(stderr, "aptx-adaptive-helper: ignoring "
+					"APTX_TTP_MODE=%s (expected audio or wall)\n",
+					mode);
+	}
+	if (offset != NULL && *offset != '\0') {
+		unsigned long v = strtoul(offset, NULL, 0);
+
+		if (v > 0 && v < 15000u)
+			ttp_audio_offset = (uint32_t)v;
+		else
+			fprintf(stderr, "aptx-adaptive-helper: ignoring "
+					"APTX_TTP_OFFSET=%s\n", offset);
+	}
+}
+
 static int initialize_mode(struct helper_state *state,
 		const struct helper_config *config,
 		enum aptx_adaptive_helper_mode mode)
@@ -939,6 +990,22 @@ static int initialize_mode(struct helper_state *state,
 	state->mtu = config->mtu == 0 ? 995 : config->mtu;
 	state->abr_enabled = config->abr_enabled != 0;
 	state->bits_per_sample = config->bits_per_sample;
+	/* Diagnostic: the host bridge always feeds 32-bit Q27 words, but the 2.2
+	 * state machine keys the Lossless candidate decision off the original
+	 * source word size.  Pinning it lets the graph stay S32 while the encoder
+	 * sees S16.  Inert unless set. */
+	{
+		const char *b = getenv("APTX_FORCE_BITS");
+		if (b != NULL && *b != '\0') {
+			unsigned long v = strtoul(b, NULL, 0);
+			if (v == 16 || v == 32)
+				state->bits_per_sample = (uint32_t)v;
+			else
+				fprintf(stderr, "aptx-adaptive-helper: ignoring "
+						"APTX_FORCE_BITS=%s (expected 16 or 32)\n", b);
+		}
+	}
+	ttp_configure();
 	state->lossless_mode = config->lossless_mode;
 	state->qhs_supported = config->qhs_supported;
 	/* The standalone container cannot sustain the Lossless candidate state:
@@ -1524,12 +1591,53 @@ static int process_audio(struct helper_state *state, const uint8_t *pcm,
 		uint64_t ms;
 		uint32_t ttp;
 
-		clock_gettime(CLOCK_MONOTONIC, &now);
-		ms = (uint64_t)now.tv_sec * 1000u +
-				(uint64_t)now.tv_nsec / 1000000u;
+		if (ttp_mode == TTP_MODE_AUDIO) {
+			uint32_t rate = state->encoder_rate ?
+					state->encoder_rate : 48000u;
+
+			ttp = (uint32_t)(((ttp_audio_samples * 15000u) / rate +
+					ttp_audio_offset) & 0xffffu);
+		} else {
+			clock_gettime(CLOCK_MONOTONIC, &now);
+			ms = (uint64_t)now.tv_sec * 1000u +
+					(uint64_t)now.tv_nsec / 1000000u;
 			ttp = (uint32_t)((ms * 15u) & 0xffffu);
+		}
+		ttp_audio_samples += (uint64_t)(pcm_size / 8u); /* stereo S32 */
 		packet[0] = (uint8_t)(ttp & 0xffu);
 		packet[1] = (uint8_t)((ttp >> 8) & 0xffu);
+	}
+
+	/* Diagnostic: pin the OTA version byte so a header can be matched to a
+	 * payload shape during experiments.  The optional file indirection exists
+	 * because the byte must be switchable without restarting the audio stack;
+	 * the path always comes from the environment (never a fixed, shared
+	 * location) so only the owner of the audio service can influence the
+	 * stream.  Values other than the three known version bytes are ignored. */
+	{
+		const char *version = getenv("APTX_OTA_VERSION");
+		const char *path = getenv("APTX_OTA_VERSION_FILE");
+		char buffer[16];
+
+		if (path != NULL && *path != '\0') {
+			FILE *file = fopen(path, "r");
+
+			if (file != NULL) {
+				if (fgets(buffer, sizeof(buffer), file) != NULL &&
+						buffer[0] != '\0')
+					version = buffer;
+				fclose(file);
+			}
+		}
+		if (version != NULL && *version != '\0' && produced >= 8) {
+			unsigned long value = strtoul(version, NULL, 0);
+
+			if (value == 0xad || value == 0xae || value == 0xaf)
+				packet[7] = (uint8_t)value;
+			else
+				fprintf(stderr, "aptx-adaptive-helper: ignoring "
+						"unknown OTA version 0x%lx\n", value);
+		}
 	}
 
 	*packet_size = produced;

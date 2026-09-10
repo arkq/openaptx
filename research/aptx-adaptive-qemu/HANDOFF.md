@@ -1087,3 +1087,51 @@ python3 air_analyse.py phone-air.pcap host-air.pcap   # 出对比摘要
 
 `air_analyse.py`（本轮新增，已随仓库提交）会打印协议层次、方向统计、消息直方图、
 LMP opcode 直方图、空口包型直方图与 L2CAP/AVDTP/AVRCP 帧数，对 HCI 抓包也能优雅降级。
+
+---
+
+## 20. 第十轮：代码审查与修复（2026-09-10 晚）
+
+用户提供了自己的对比调查（`~/Documents/aptx-adaptive-vs-qualcomm/`，官方 offload 基线 +
+桥接层逐行证据），要求**先全面审阅并修掉 BUG/风险，再插 Ubertooth 做空口取证**。
+完整清单见 `CODE-REVIEW.md`，要点：
+
+### 20.1 修掉的 BUG（14 项，含 1 项 high）
+
+| 编号 | 位置 | 问题 |
+|---|---|---|
+| B1 | 插件 `write_full()` | **写路径没有超时**：helper 卡住 → 管道写满 → PipeWire 数据线程永久阻塞（唯一能把数据线程挂死的点） |
+| B2 | 插件 OTA 剥离 | `APTX_ADAPTIVE_STRIP_OTA` 用 `getenv()!=NULL` 判定，**设成 `0` 也会剥 OTA**（即已知的错误线格式），且无法关闭 |
+| B3 | 插件 `select_config` | `APTX_ADAPTIVE_FEATURES` 在"清 R2.2 位"之后整字重写，**把刚清掉的位又加回来**，只靠 helper 兜底 |
+| B4 | 插件 ABR | `abr_level_for_unsent()` 把 `media-sink` 传来的 **backlog（未发字节）当成空闲空间**，等级映射完全反向 |
+| B5 | helper R3 | R3 模式却向 **R2 wrapper** 要静态属性 → 初始化内存需求错误 → `aptx_adaptive3_enc_init` 直接 `EIO`（直编 R3 一直起不来的原因） |
+| B6 | helper R3 | 实验版**无条件**把 `packet[7]` 改成 `0xad`，可能与模块自身状态机产出的载荷不一致 → 已回退为"仅当模块留 0 时兜底" |
+| B7 | helper OTA 覆盖 | 版本字节从**固定且全局可写的 `/tmp/aptx_ota_version`** 读取（任何本地用户都能改音频流头）→ 改为 `APTX_OTA_VERSION_FILE` 指定路径 + 只接受 0xad/0xae/0xaf |
+| B8 | 插件 `spawn_helper()` | 子进程继承父进程**被屏蔽的信号掩码**（PipeWire 屏蔽 SIGINT/SIGTERM → `SIGTERM` 收不到，reap 只能靠 SIGKILL）和**全部 fd** → 已清掩码、重置 SIGPIPE、关闭 ≥3 的描述符 |
+| B9–B11 | 插件 | 超大应答静默丢包、MTU 过小无提示、控制载荷只按 `UINT32_MAX` 限制 → 均已加日志/上限 |
+| B12 | 运行时 | 部署的是 `aptx-lossless-helper-exp`，而其源码（`/tmp/helper_ttpaudio.c`）**已不在磁盘** → 不可复现。现已把开关折回仓库源码并**用仓库源码重建**部署二进制，删掉 `-exp` 与对应 drop-in |
+| B13 | NixOS 模块 | `adaptiveEnv` 里一直带着 `STRIP_OTA=1`、`CAPTURE=/tmp/...`、`FORCE_RATE=44100`，**每个会话**都生效（哪怕在用 aptX HD）→ 已移除 |
+| B14 | NixOS 模块 | 同一组变量通过 `environment.variables` 泄漏到**全系统每个进程** → 已改为只给两个音频服务 |
+| B15 | 插件 `get_delay()` | 上报 0 采样（仅抽取时 7），节点延迟漏掉编码块 → 改为"一个编码块 + 半带滤波器"（与 LDAC 的 one-frame 惯例一致） |
+| B16 | 模块注释 | 原文称 `bluez5.codecs` 顺序决定优先级（错，优先级来自 `codec_order()`，AD 排在 HD 之前）→ 已更正并写明"想彻底避免误选静音就从白名单删掉 aptx_adaptive" |
+
+### 20.2 记录在案但不修的风险
+
+W^X 关闭（QEMU TCG 必需，`enable=false` 可恢复）、专有 blob 许可、
+**ABR 实际无效（固定码率）**、TTP 为主机合成（默认已改为音频时钟域）、
+R3 路径不完整（游标保护返回 `-EOVERFLOW`）、以及耳机静音本身（待空口取证）。
+
+### 20.3 本轮验证
+
+- helper 用仓库源码 + 仓库 `compat.c` 重建，普通 AD 回归通过：664 B / 25 ms /
+  OTA `… 64 01 00 00 00 ae` / 帧头 `8300c0a1` / TTP 每包 +375（音频时钟域，基准 3900）；
+- 开关逐项验证：`APTX_TTP_MODE=wall`（旧行为）、`APTX_OTA_VERSION=0xaf`（生效）、
+  `=0x99`（拒绝）、`APTX_OTA_VERSION_FILE=<路径>`（生效）、`APTX_FORCE_BITS=16`
+  （切到 768 B/ptype 5 形态）、`mode=r3`（配置成功）；
+- 插件改动前后用真实头文件做 `-fsyntax-only` 对比，诊断数量一致（无新增错误/告警）；
+- 运行时 drop-in 只剩 `zzz-aptx-phone-exact.conf`（`SOURCE_TYPE=0x00` +
+  `CHANNEL_MODE=stereo`，`FORCE_RATE` 注释掉、`FEATURES` 不再设置），
+  已用 `/proc/<wireplumber>/environ` 核对生效结果。
+
+新增工具：`link_mode.sh`（把 Android 的 BR-only 包型 + 链路策略套到本机链路，
+用于对照实验）。空口取证计划仍见 §19，等设备接入即可开始。
