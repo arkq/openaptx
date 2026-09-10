@@ -1135,3 +1135,21 @@ R3 路径不完整（游标保护返回 `-EOVERFLOW`）、以及耳机静音本�
 
 新增工具：`link_mode.sh`（把 Android 的 BR-only 包型 + 链路策略套到本机链路，
 用于对照实验）。空口取证计划仍见 §19，等设备接入即可开始。
+
+### 20.4 部署与部署后验证（本轮完成）
+
+- 插件修复提交到 fork：`baizhu945/pipewire` `b97eae8`，并把
+  `/etc/nixos/pipewire-aptx-adaptive-module.nix` 的 pin 从 `2c1c2ca` 换到
+  `b97eae8c84b3b253429461abbb7c6c099cbe36cc`，`nixos-rebuild switch` 成功；
+  用 `/proc/<wireplumber>/maps` 确认运行中的插件确实来自新 store 路径。
+- 模块同时删掉了 `STRIP_OTA=1` / `CAPTURE=…` / `FORCE_RATE=44100` 三个"实验遗留"
+  以及 `environment.variables = adaptiveEnv`（那行把编码器配置泄漏到全系统）。
+  注意还有一个**陈旧状态**要手工清：用户级 systemd manager 的环境里仍留着旧值，
+  用 `systemctl --user unset-environment APTX_ADAPTIVE_FORCE_RATE
+  APTX_ADAPTIVE_CAPTURE APTX_ADAPTIVE_STRIP_OTA` 清掉后重启音频服务。
+- 运行时 drop-in 收敛为 `zzz-aptx-phone-exact.conf`（`SOURCE_TYPE=0x00` +
+  `CHANNEL_MODE=stereo`；`FORCE_RATE` 注释掉、`FEATURES` 不再设置）。
+- 部署后端到端验证（耳机已连、AD 编码）：487 个媒体包、656 B 帧、25 ms 节奏、
+  OTA `… 64 01 00 00 00 ae` **保留**（证明 STRIP_OTA 遗留已消失）、
+  帧头 `8300d0a1`（48 kHz 立体声，速率不再被强制成 44.1 kHz）、
+  217 kbps —— 与手机抓到的形态一致。
