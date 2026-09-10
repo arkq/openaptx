@@ -1,6 +1,6 @@
-<!-- markdownlint-disable MD013 -- the finding tables carry file:line and
-     evidence columns that cannot be wrapped to 80 columns. -->
-
+<!-- markdownlint-disable MD013 -->
+<!-- The finding tables carry file:line and evidence columns that cannot
+     be wrapped to 80 columns. -->
 # aptX Adaptive bridge — code review, bug list and risk register
 
 Date: 2026-09-10 · Reviewer: the agent that wrote the bridge · Requested by the
