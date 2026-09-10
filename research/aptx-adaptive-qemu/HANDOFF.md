@@ -1028,3 +1028,62 @@ DSP/offload 完成编码、OTA 头、TTP、以及链路调度**（这也解释�
      手机的 offload 管线；能否出声取决于耳机要的到底是“高通控制器”还是“高通 offload 管线”。
   3. 若耳机要的是后者（从证据看很可能），则**在不外接高通硬件的前提下无法实现**，
      只能继续用已经可用的 aptX HD，或接受 BT11/手机作为源。
+
+---
+
+## 19. 第九轮：空口取证（Ubertooth）准备 + 链路层实验否掉（2026-09-10）
+
+### 19.1 先把 Android 的链路设置原样套上——**仍静音**
+
+从手机 btsnoop 解出的 A2DP 链路设置（§18）逐条在我们的链路上重放：
+
+| 命令 | 参数 | 结果 |
+|---|---|---|
+| `Change Connection Packet Type`（0x01/0x000F） | `0xcc18`（只用 BR：DH1/DM1/DH3/DM3/DH5/DM5） | Command Status 0x00 ✓ |
+| `Write Link Policy Settings`（0x02/0x000D） | `0x0005`（hold 开、sniff 关） | Command Complete 0x00 ✓ |
+
+链路仍然健康（656 B/25 ms = 217 kbps、无间隙、无速率异常），**耳机依旧静音**。
+→ 链路层"包型 / 链路策略"这一项也排除。脚本：`/tmp/apply_link_mode.sh`。
+
+### 19.2 嗅探计划（Ubertooth One）
+
+剩下的可能只有两类：**(A) 对端控制器侧的高通行为**、**(B) 耳机固件内部判断**。
+空口嗅探正好能一刀切开这两类。
+
+地址（跟随时需要 master 的 LAP，解码需要 UAP）：
+
+| 设备 | BD_ADDR | LAP | UAP |
+|---|---|---|---|
+| 本机 AX210 | `FC:B3:AA:C5:01:42` | `0xC50142` | `0xAA` |
+| 手机 HONOR 90GT | `44:90:46:40:FD:DD` | `0x40FDDD` | `0x46` |
+
+三份抓包：
+
+1. **手机 → 耳机（播放中）= 可用参照**：看**反向**（耳机→手机）有没有说 LMP/厂商 LMP/ACL
+   —— 这一层 HCI 完全看不到，是我们至今的盲区；
+2. **本机 → 耳机（我们的 AD 流）= 失败对照**：同一套分析，第一次能看到我们链路的 LMP 层、
+   空口包型/长度、重传与 ACK 时序（AX210 是 Wi-Fi/BT 二合一，共存抖动只能在空口看到）；
+3. 手机 → 耳机（暂停）= 基线，区分"连接固有"与"播放相关"。
+
+判读：
+
+- ①有、②没有的反向交互 → 原因是**耳机要求高通对端控制器**（并能进一步区分是"控制器级"
+  还是"offload 管线级"，后者在 Linux 侧无解）；
+- 两条链路空口行为完全一致 → 判断发生在**耳机内部**，与空口无关 → 主机侧任何改动都无效。
+
+**Ubertooth One 的能力边界**：能完整解 BR(GFSK) 包与 **LMP PDU**（LMP 不加密）；
+**解不了 EDR(2-DHx/3-DHx) 载荷**，但 EDR 包头也是 GFSK，所以类型/长度/时序仍可见
+（媒体载荷本来就有，不需要）。加密 ACL 载荷需要 link key（`/var/lib/bluetooth/**/info` 里有）。
+
+工具：
+
+```bash
+nix-shell -p ubertooth        # 只带 host 工具（ubertooth-rx / -util / -dfu），不带 .dfu 固件
+ubertooth-util -v             # 验固件与设备（现在报 could not open device = 未插）
+ubertooth-rx -l 0x40FDDD -r phone-air.pcap   # 跟随手机↔耳机
+ubertooth-rx -l 0xC50142 -r host-air.pcap    # 跟随本机↔耳机
+python3 air_analyse.py phone-air.pcap host-air.pcap   # 出对比摘要
+```
+
+`air_analyse.py`（本轮新增，已随仓库提交）会打印协议层次、方向统计、消息直方图、
+LMP opcode 直方图、空口包型直方图与 L2CAP/AVDTP/AVRCP 帧数，对 HCI 抓包也能优雅降级。
