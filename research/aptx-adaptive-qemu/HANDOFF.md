@@ -776,3 +776,63 @@ MOMENTUM 5。本轮从 `/data/log/bt/btsnoop_hci_20260910_080910.log`（8849 帧
 - 复抓脚本/工具沿用 §5：`adb pull /data/log/bt/<最新>.log` + `tshark`（AVDTP 信令）
   + `acl.py`（ACL 重组）；媒体存在性判据 = 搜 `83 00 ?? a1` 帧头与 `80 60` RTP 头。
 
+
+---
+
+## 15. 第五轮续：R2 入口点实验与模块内部决策链（2026-09-10 上午）
+
+### 15.1 实验：改用模块的“纯 R2”入口（`aptx_adaptive2_enc_*`）
+
+模块导出了三个 CAPI 入口，此前 helper 的 R2 路径只用其中一个：
+
+| 入口 | 用途 | helper 是否使用 |
+|---|---|---|
+| `capi_aptx_adaptive_enc_init` / `_process_wrapper` | R2/R2.2 外层 wrapper | ✅ R2 路径用的就是它 |
+| `aptx_adaptive3_enc_init` + `get_aptx_adaptive3_vtable` | R3（lossless） | ✅ R3 路径 |
+| **`aptx_adaptive2_enc_init` + `get_aptx_adaptive2_vtable`** | 纯 R2（mode 2） | ❌ **从未用过** |
+
+于是给 helper 加了 `APTX_R2_ENTRY=1` 开关切到 mode-2 入口
+（源码 `/tmp/helper_r2entry.c`，`SRC_COMPAT=/tmp/compat_log.c` 构建，
+产物 `/tmp/aptx-r2dir/helper-r2entry`，用 `helper_probe.py` 直接驱动）：
+
+| 变体 | 输出 |
+|---|---|
+| 基线（CAPI wrapper） | 664 B 包（OTA 8 + 帧 656），OTA `… 64 01 00 00 00 ae`，TTP ≈15000/s |
+| `APTX_R2_ENTRY=1`（mode 2） | **完全相同**：664 B、period `0x64`（25 ms）、ptype 1、版本 `0xae` |
+
+→ **“25 ms 是 R2.2 wrapper 钉的”这个结论要修正**：纯 R2 入口一样是 25 ms/656 B。
+包周期由编码器内部状态决定，与入口点无关。
+
+### 15.2 模块日志：内部其实选的是 12 ms / 437 kbps
+
+去掉 `compat.c` 的日志门控重建 helper 后拿到完整决策链（两种入口点都一样）：
+
+```
+INIT: Final bitrate after all limiting conditions in Kona is 364000 bps
+INIT: Actual Period selected 14.0            # f64 0x402C000000000000
+INIT DONE: Period encoded is 56              # 0x38 → 14 ms
+AVS_ENCODER_PARAM_ID_BIT_RATE_LEVEL_MAP 3    # 我们送的表（kbps）已被采纳
+   Selected Level=1..5  Bitrate=437          # 0x1b5 = 437 kbps
+   Selected Period=12.0  PCMinterval=576     # 576 样本 = 12 ms @48k
+IMCL_PARAM_ID_BT_BIT_RATE_LEVEL_ENCODER_FEEDBACK br_level = 3
+PROCESS(): OUTPUT_BUFFER_HEADER written, me->period = 100   # 0x64 = 25 ms
+```
+
+两点要记下来：
+
+1. **437 kbps × 12 ms ÷ 8 = 655.5 B ≈ 656 B**——656 字节载荷正好等于“12 ms @ 437 kbps”，
+   而不是“25 ms @ 210 kbps”。所以这个 656 B 包应当是**若干内部帧的聚合**
+   （2 × 12 ms ≈ 24 ms 音频），OTA 的 `period=0x64` 是**包间隔**（25 ms）而非单帧时长。
+   实测相符：`helper_probe.py` 喂 1200 样本（25 ms）块时**每块恰好出 1 包**。
+   → 不要再用“212 kbps 低于 279 kbps 下限”解释静音（该判断已在 §12.3/§13.6 撤回）。
+2. 模块内部想要 12–14 ms，外层 wrapper 发 25 ms 包；而手机自己发出的包也是
+   656 B / 25 ms 间隔（§8、§13.1），形态一致，所以这**仍然不是**静音原因。
+
+### 15.3 结论（本轮最终）
+
+- 源端可观测的一切均已对齐：SET_CONFIG 字节、RTP 头、OTA 头、帧形态、包间隔、
+  控制流，外加“回放手机原始 PDU 仍静音”（§13.10）。
+- 因此差异只能落在**源设备/链路层**：AX210 是 Intel 控制器 + 主机侧 L2CAP，
+  而两个能出声的源（HONOR 90GT、FiiO BT11）都是**高通控制器 + AD offload**。
+- ⚠️ 因此“换一个非 Intel 的蓝牙棒”**不能**区分“Intel 特有毛病”与“必须是高通源”；
+  要区分必须用**高通控制器**的适配器（换 Realtek/CSR 仍失败则说明是高通源依赖）。
