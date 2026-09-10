@@ -1,3 +1,6 @@
+<!-- markdownlint-disable MD013 -- the finding tables carry file:line and
+     evidence columns that cannot be wrapped to 80 columns. -->
+
 # aptX Adaptive bridge — code review, bug list and risk register
 
 Date: 2026-09-10 · Reviewer: the agent that wrote the bridge · Requested by the
@@ -7,7 +10,7 @@ user after their own comparison against the Qualcomm implementation
 Scope reviewed:
 
 | Artefact | Path |
-|---|---|
+| --- | --- |
 | PipeWire codec plugin | `~/work/pipewire/spa/plugins/bluez5/a2dp-codec-aptx-adaptive.c`, `a2dp-codec-caps.h` |
 | QEMU helper | `~/work/openaptx/research/aptx-adaptive-qemu/aptx-lossless-helper.c`, `compat.c` |
 | OTA parser | `~/work/openaptx/src/aptx-adaptive-stream.c`, `include/aptxadaptive.h` |
@@ -21,7 +24,7 @@ based on recollection. Findings marked **fixed** are implemented in this round.
 ## 1. Bugs found and fixed
 
 | # | Sev | Where | Bug | Fix |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | B1 | **high** | plugin `write_full()` | Writes to the helper had **no deadline**. If the helper stops reading stdin (stuck emulator, crashed QEMU, or a helper blocked on its own full stdout pipe), the 64 KiB pipe fills and the PipeWire data thread blocks in `write()` **forever**. `read_full()` was already bounded — only the write path was not. | `write_full()` now polls with `APTX_ADAPTIVE_HELPER_WRITE_TIMEOUT_MS` (1 s) like the read path, and reports `-ETIMEDOUT`. |
 | B2 | med | plugin, OTA strip | `APTX_ADAPTIVE_STRIP_OTA` was tested with `getenv(...) != NULL`, so **`=0` enabled stripping** and there was no way to switch it off from the environment. Stripping the 8-byte wrapper is the known-broken wire format. | New `env_flag()` helper: unset = default, empty = true, `0/no/false/off` = false. |
 | B3 | med | plugin, `codec_select_config()` | `APTX_ADAPTIVE_FEATURES` rewrote the whole 4-byte feature word **after** the deliberate clearing of the R2.2/Lossless capability bit, so the shipped value `0x0f000092` re-added exactly the bit the code removes (stream stalls when the wrapper waits for sideband feedback). It only worked because the helper has its own backstop. | The override is masked again after parsing, with a warning; the helper backstop stays as defence in depth. |
@@ -42,7 +45,7 @@ based on recollection. Findings marked **fixed** are implemented in this round.
 ## 2. Residual risks (accepted, documented, not fixable in software)
 
 | # | Risk | Why it stays | Mitigation |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | R1 | **W^X is disabled** for `pipewire.service` and `wireplumber.service` while the module is enabled | QEMU TCG must JIT, so the codec cannot run under `MemoryDenyWriteExecute=yes`; the hardening flag is static per unit, so it is off even when aptX HD is in use | Documented in the module. `services.pipewire.aptxAdaptive.enable = false` restores the protection; do that when not experimenting. |
 | R2 | Proprietary extracted blob (`aptx_adaptive_enc_module.so.1`, Hexagon) | The only aptX Adaptive encoder in existence; no open implementation | Never enters the Nix store; `README.md`/`STATUS.md` already state it must not be used as a general audio backend without a licence and real-time review. |
 | R3 | **ABR is non-functional** with this encoder build: the stream is fixed-rate (~210 kbps at 25 ms) | The R2.2 CAPI build ignores IMCL quality-level feedback outside a full AudioReach container; no controller-side RF/BER feedback exists on the AX210 | Plugin logs it at init; the review of the user's own comparison document records the same conclusion. |
