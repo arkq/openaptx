@@ -917,3 +917,70 @@ APTX_FORCE_BITS=16|32   /* 覆盖交给 2.2 状态机的源字长提示 */
 判定逻辑：若 `0xad`/`0xaf` 出声而 `0xae` 不出声 → 耳机只吃 Snapdragon Sound
 包形，问题不在链路而在**包形/版本**，普通 AD 就需要把 wrapper 顶到等级 ≥6（§13.7.0）；
 若三者都静音 → 差异确定在控制器/空口层（§13.13）。
+
+---
+
+## 17. 第七轮：部署方式说明 + 普通 AD 的最后几个变量（2026-09-10）
+
+### 17.1 部署结构（为什么改代码不用改 `/etc/nixos`、不用 rebuild）
+
+系统里只有**两样东西**是 Nix 构建的（`/etc/nixos/pipewire-aptx-adaptive-module.nix`）：
+
+| 组件 | 来源 | 改动代价 |
+|---|---|---|
+| PipeWire 插件 `libspa-codec-bluez5-aptx-adaptive.so` | `pkgs.pipewire.overrideAttrs`，pin fork rev `2c1c2ca` | **必须** nixos-rebuild（或改 `src` 指向本地工作树重建） |
+| openaptx 库（插件的 C API） | `fetchFromGitHub` rev `c5fdab9` | 同上 |
+| **Hexagon helper 二进制** | `~/Documents/aptx-adaptive-runtime/helper/aptx-lossless-helper`，由 env
+`PIPEWIRE_APTX_ADAPTIVE_HELPER` 指定 | **纯运行期文件**：用 hexagon-clang + qemu 重新编译后直接覆盖，**不需要 Nix** |
+
+因此本轮的“切换传输方案”全部走**运行期**两条路，都不动 `/etc/nixos`：
+
+1. **换 helper 二进制**：`build-any.sh` 编出 /tmp 里的实验版，再拷成
+   `.../helper/aptx-lossless-helper-exp`（**原 helper 文件保持不动**）。
+2. **用户级 systemd drop-in**：`~/.config/systemd/user/{pipewire,wireplumber}.service.d/zzz-aptx-losstest.conf`
+   里改 `PIPEWIRE_APTX_ADAPTIVE_HELPER` 与各项 env 开关，然后
+   `systemctl --user daemon-reload && systemctl --user restart pipewire.socket pipewire wireplumber`。
+
+插件的各种 env 开关（`APTX_ADAPTIVE_FORCE_RATE`/`FEATURES`/`FREQ_BITS`/`LOSSLESS`/
+`CODEC_FRAMES`/`QHS_SUPPORT`/`STRIP_OTA`/`REPLAY`…）**在已部署的 pin rev 里就有**，
+所以调它们也不需要重编。只有改**插件源码本身**（例如格式列表顺序、MTU 处理）才需要 rebuild；
+那时可以（且只能）把模块的 `src` 指向本地工作树 `/home/baizhu945/work/pipewire` 重建，
+**不必**向 pipewire fork 提交（用户要求只提交 openaptx）。
+
+回退：删掉上面的 drop-in → `daemon-reload` → 重启 pipewire 即可（原 helper 未被覆盖）。
+
+### 17.2 helper 新增的运行期开关（默认全部无效）
+
+| env | 作用 |
+|---|---|
+| `APTX_FORCE_BITS=16\|32` | 覆盖交给 2.2 状态机的源字长提示 |
+| `APTX_OTA_VERSION=0xNN`（或写 `/tmp/aptx_ota_version`） | 覆盖 OTA 版本字节（0xae/0xad/0xaf），文件方式无需重启 |
+| `APTX_TTP_MODE=audio` + `APTX_TTP_OFFSET` | TTP 改用**音频时钟域**：`TTP = samples/rate*15000 + offset` |
+| `APTX_DUMP_PORTS` / `APTX_DUMP_R2_STATE` | 打印 CAPI 两个输出口长度与模块内部状态 |
+
+### 17.3 普通 AD（非 Lossless）本轮结论
+
+用户明确：**手机抓到的是非 lossless 的 AD，只测非 lossless**。于是把 Lossless 线路全部撤掉，
+只保留普通 AD，并把剩下所有可观测变量都过了一遍：
+
+| 变量 | 我们的值 | 与手机（可用源）对比 | 结果 |
+|---|---|---|---|
+| SET_CONFIG | `d7 00 00 00 ad 00 40 02 50 64 64 64 ff ff 00 01 92 …` | **逐字节相同** | 静音 |
+| RTP 头 | `80 60 <seq> <ts> 00000000`，ts 每包 +1102 | 相同 | 静音 |
+| 帧 | 656 B，帧头 `8300c0a1`（44.1k 立体声） | 相同 | 静音 |
+| 节奏 / 速率 | 25 ms/包，**217 kbps** | 手机流同为 656 B / 25 ms ≈ 210–217 kbps | **无异常** |
+| OTA | period `0x64`、ptype 1、chan 0、ver `0xae` | 相同 | 静音 |
+| TTP 时基 | 墙钟 / 冻结 / **音频时钟域**（= RTP 时间戳 + 235–260 ms，实测 15000/s、每包 +375） | — | **仍静音** |
+
+**结论**：普通 AD 的可观测部分（含把手机原始包逐字节回放）已经全部对齐且无速率异常，
+TTP 时基也排除。剩下的差异只能在**控制器/空口层**：我们是 Intel AX210 + 主机侧 L2CAP，
+而两个可用源（HONOR 90GT、FIIO BT11）都是**高通控制器 + A2DP offload**（§13.13）。
+
+可选下一步：
+
+1. 换一个**非 Intel 的蓝牙适配器**（30 元级 Realtek/CSR）：能出声 → 是 Intel/AX210 的问题；
+   仍静音 → 说明必须是高通源。
+2. 换 M.2 的**高通控制器**（如 QCNCM865，本机内部、不算外接 USB）：只有在“耳机需要高通源”
+   这一类原因下才有意义；注意此前的答复需要修正——**不能**用“BlueZ 不用高通的 AD offload”
+   直接否定它，因为码流本来就是我们主机侧编的，控制器只需提供链路行为。
+3. 暂时使用已在工作的 **aptX HD**（实测 55 kB/s ≈ 440 kbps，反而比我们 AD 的 217 kbps 更高）。
