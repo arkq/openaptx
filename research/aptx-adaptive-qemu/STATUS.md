@@ -484,7 +484,7 @@ however, cannot be a phase artefact.
 | `helper_probe.py`, `helper_sweep.py` | drive the helper, sweep params |
 | `raw_probe.py` | raw `set_param` probe for the proprietary module |
 | `preflight.sh` | gate: codec and sink really are aptX Adaptive |
-| `stream_check.py` | wire shape, incl. OTA self-consistency and frame/type cross-check |
+| `stream_check.py` | wire shape, OTA consistency, frame/type check |
 | `cie_check.py` | compare the AVDTP codec element with the phone's |
 | `run_ad_test.sh` | gate + playback + both checks in one command |
 | `air_analyse.py` | summarise an Ubertooth BR/EDR capture |
