@@ -378,34 +378,49 @@ evidence of absence. The load-bearing observation is experiment C -- a follower
 that is locked onto the piconet hears nothing more, which a standard EDR link
 cannot explain.
 
-### 7.2 The BT11 switches mode, and its piconet switches PHY
+### 7.2 The BT11's Adaptive piconet is visible only while it connects
 
 The FiiO BT11 (QCC5181) plays on this headset in both of its modes, and the
 operator can switch between them. That turns it into an experiment the fixed
-sources cannot provide, and the result is unambiguous.
+sources cannot provide.
 
-A piconet's LAP is the master's address, so the BT11 to headset link can only
-ever be `0x08064F` (the BT11 as master) or `0xB7163B` (the headset as master).
-There is no third possibility.
+**Correction (second round, 2026-09-12).** The measurements below were first
+taken by looking for `0x08064F` and `0xB7163B` only, on the assumption that
+those were the only two possibilities. They are not: the BT11's ordinary
+Adaptive piconet is `0x6A8FCC`, and neither of the two old LAPs appears in that
+mode at all. The four-run contrast below re-establishes the result with an
+operator-anchored identity (details in HANDOFF 21.18):
 
-| observation | result |
-| --- | --- |
-| Lossless, unplug test | 103 hits/min, gone for the 40 s, back on replug |
-| ordinary Adaptive, 300 s survey | both LAPs **0 hits**, audio playing |
-| ordinary Adaptive, 300 s again, with unplug | both LAPs **0 hits** |
+| BT11 state | `0x6A8FCC` | other LAPs (noise floor) |
+| --- | --- | --- |
+| unplugged, 130 s | **0 hits** | e.g. `0x1C8CB9` 120/min |
+| unplugged, 130 s (repeat) | **0 hits** | e.g. `0x1C8CB9` 120/min |
+| plugged, streaming, 130 s | **74.3/min, 0 dBm** | noise only |
+| plugged, streaming, 130 s (repeat) | **59.1/min, 0 dBm** | noise only |
 
-So in ordinary Adaptive mode the BT11's piconet is invisible to a standard
-BR/EDR receiver -- not just its media, since the ACL signalling of a visible
-piconet would still appear. In Lossless mode the very same pair runs a visible
-standard EDR link and is audible.
+Then a single capture around an operator power-cycle (unplug, ~30 s, replug)
+shows the mechanism directly. `0x6A8FCC` scores 0 hits for the first 49 s, then
+259 hits in the 31 s of reconnection (8.4 hits/s, 45 channels, up to 0 dBm),
+then 0 hits for the remaining 118 s while the music plays. The headset's own
+address `0xB7163B` appears for 2 s immediately before the burst -- that is the
+paging phase, where the access code belongs to the paged device.
+
+The earlier result was therefore right about steady state and wrong about the
+rest. In **ordinary Adaptive** mode the BT11's link is plainly visible to a
+standard BR/EDR receiver while it is being established, and invisible once it
+is streaming: 0 hits across 118 s (same capture), 180 s and 190 s (separate
+captures) with audio audibly playing. The claim that the whole piconet lives on
+the proprietary PHY, "even the ACL signalling", is too strong: the connection
+setup is standard. In **Lossless** mode the same pair stays visible in steady
+state (103 hits/min in the earlier unplug test) and is audible.
 
 ### 7.3 What that leaves, and the next experiments
 
 | source | mode | link | audible |
 | --- | --- | --- | --- |
-| FiiO BT11 | aptX Lossless | standard EDR, visible | yes |
-| FiiO BT11 | ordinary Adaptive | invisible (proprietary PHY) | yes |
-| phone (Snapdragon) | ordinary Adaptive | invisible | yes |
+| FiiO BT11 | aptX Lossless | standard EDR, visible in steady state | yes |
+| FiiO BT11 | ordinary Adaptive | visible only while connecting | yes |
+| phone (Snapdragon) | ordinary Adaptive | visible only while connecting | yes |
 | this host | ordinary Adaptive | standard EDR, visible | no |
 | this host | aptX HD | standard EDR, visible | yes |
 
@@ -448,14 +463,23 @@ channel and counting, calibrated against this host's own link whose rate is
 known from its HCI capture (40 packets/s), recovers only 1 to 2 percent of the
 true packets, and the figure depends on RSSI. Frame lengths do not help either,
 because the Ubertooth cannot decode EDR headers. What did settle the question
-was the operator-anchored unplug test together with the fact that a piconet LAP
-is the master's address.
+was the operator-anchored power-cycle test together with the fact that a piconet
+LAP is the master's address.
+
+Two further cautions come out of the same round. First, do not assume which
+LAPs a link can have: the earlier AD-mode result was measured against
+`0x08064F`/`0xB7163B`, and the BT11's actual Adaptive piconet turned out to be
+`0x6A8FCC`, so the null result proved nothing about the link it was aimed at.
+Second, the noise floor of a single contrast is large -- between two captures in
+the *same* BT11-absent state, `0x73BB13` went from 21.2 hits/min to 0 and
+`0x1C8CB9` stayed at 120 hits/min -- so a LAP that is 0 in two runs and 59 to 74
+hits/min in two others is the only kind of evidence worth acting on.
 
 One survey artefact is worth recording for anyone repeating this: the detection
 of a low-traffic piconet recurs roughly every 60 s, so such a LAP shows
-spurious gaps of 25 to 78 s (`0x6a8fcc`, `0xee02f8` and `0x2ab332` all did in
-the final run). A 103 hits/min piconet going to zero across a full 300 s,
-however, cannot be a phase artefact.
+spurious gaps of 25 to 78 s (`0xEE02F8` and `0x2AB332` both did in the final
+run). `0x6A8FCC` used to be listed here as a third example; it is not an
+artefact at all, it is the BT11's Adaptive piconet (section 7.2).
 
 ## 8. Reference data
 
