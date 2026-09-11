@@ -1417,3 +1417,51 @@ cd ~/work/openaptx/research/aptx-adaptive-qemu
 - 听过之后记得回退：删掉那两个 drop-in（或至少 `zzz-aptx-force44100.conf`，
   它会把所有内容重采样到 44.1 kHz），并把 `/etc/nixos/...nix` 的 `src` 从本地路径
   改回 pinned rev。
+
+### 21.12 定论：主机侧变量已穷尽，差异只在链路层（2026-09-12 凌晨）
+
+用户听了 T6 那份"与手机逐字节同构"的配置：**没有任何声音**，实测速率 **26.73 kB/s**
+（与我在 HCI 上量到的 27.07 kB/s 一致 ⇒ 码流确实以正确形态、正确速率发出去了）。
+
+**至此主机侧所有可控变量都已测过，全部静音：**
+
+| 变量 | 测过的取值 |
+|---|---|
+| 采样率 | 48 kHz（`0x10`）与 **44.1 kHz（`0x40`，手机同款）** |
+| OTA 版本字节 | `0xae`（R2）与 `0xaf`（R2.2） |
+| OTA 包类型 | `0x00`（普通 R2 形态） |
+| AVDTP CIE | **与手机 SET_CONFIG 逐字节相同**（44.1 kHz / stereo / features `0x0f000092`） |
+| 码流内容 | 回放手机原始 PDU（§13.10） |
+| TTP 时基 | 墙钟 / 音频钟 / 冻结（§13） |
+| 包间隔与吞吐 | 25 ms / 217 kbps，已被 `stream_check.py` 核对 |
+| R2.2 / Lossless 形态 | 44.1k+16bit 下实时管线停摆（§21.7、T3），不可用 |
+
+**唯一剩下的差异是链路层**：手机走高通 QHS（专有 6 Mbps 物理层，§21.5），AX210 只能标准 EDR。
+
+**结论：在 Intel AX210 上，主机侧软件再正确也不会让这副耳机出声。** 三个数据点一致 ——
+能出声的源（HONOR 90 GT、FiiO BT11/QCC5181）都是高通 + QHS；唯一不出声的源（AX210）没有 QHS。
+
+**下一步（待用户决定）**
+
+1. **换高通控制器**（M.2 内置，如 QCNCM865 / FastConnect 7800，仍不算外接 USB）。
+   预期：Qualcomm↔Qualcomm 链路会协商出 QHS，而我们的 AD 码流作为 A2DP 载荷走这条链路，
+   耳机侧的解码门槛应当被满足 —— 这是唯一还有希望"原生"的路径。
+2. **接受外接方案**：FiiO BT11 已验证可用，但属外接 USB 硬件，不符合项目目标。
+3. 暂停 AD，转去完善其他可出声的编码器（aptX HD 在本机链路已验证可用）。
+
+**本轮收尾状态（已核验）**
+
+- 实验 drop-in 全部删除，基线恢复：`LOSSLESS=off`、通告关闭、无 `FORCE_RATE`；
+  复验 `PASS`（676 B / 25.00 ms / 27.05 kB/s / ptype `0x00` / `0xae` / 帧头 `83 00 d0 a1`）。
+- `/etc/nixos/pipewire-aptx-adaptive-module.nix` 的 `src` 已从本地路径改为
+  **pinned rev `8976dcf`**（含新开关，默认关闭）；运行中的插件来自该 pin
+  （`1zvdsfvv0n47k3lq8b2i7dkpxinwaan1-pipewire-aptx-adaptive-…`）✓。
+- 两个仓库已推送：pipewire fork `8976dcf`、openaptx `808c1e3`（CI 六项全绿）。
+
+**留给后续复测的最小命令**（若换控制器后要重跑）：
+
+```bash
+cd ~/work/openaptx/research/aptx-adaptive-qemu
+./preflight.sh --fix && ./run_ad_test.sh /tmp/tone48k24.wav
+python3 cie_check.py /tmp/ad-test.hci --expect-features 0x0f000012   # 通告关闭时的基线
+```
