@@ -712,8 +712,12 @@ static int configure_r2_capi(struct helper_state *state)
 
 static int configure_bitrate_map(struct helper_state *state)
 {
+	/* The module snaps these to the kbit/s thresholds
+	 * 262/275/290/307/327/348/373/402/436.  Sending bit/s (279000 ...) puts
+	 * every entry above the top threshold, which collapses all five levels
+	 * into one choice and leaves the encoder on its longest frame. */
 	static const uint32_t bitrates[APTX_ADAPTIVE_MAX_ABR_LEVELS] = {
-		279000, 320000, 352000, 384000, 420000,
+		279, 320, 352, 384, 420,
 	};
 	struct aptx_adaptive_bitrate_map map __attribute__((aligned(4))) = {
 		.num_levels = APTX_ADAPTIVE_MAX_ABR_LEVELS,
@@ -1284,8 +1288,12 @@ static int set_quality_level(struct helper_state *state, uint32_t quality_level)
 
 static int set_bitrate(struct helper_state *state, uint32_t bitrate)
 {
+	/* The module snaps these to the kbit/s thresholds
+	 * 262/275/290/307/327/348/373/402/436.  Sending bit/s (279000 ...) puts
+	 * every entry above the top threshold, which collapses all five levels
+	 * into one choice and leaves the encoder on its longest frame. */
 	static const uint32_t bitrates[APTX_ADAPTIVE_MAX_ABR_LEVELS] = {
-		279000, 320000, 352000, 384000, 420000,
+		279, 320, 352, 384, 420,
 	};
 
 	/* The host-side legacy command carries a bitrate.  Translate the known

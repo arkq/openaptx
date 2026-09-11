@@ -35,9 +35,10 @@ CIE_441K_STEREO_F92 = bytes.fromhex(
 R2_STREAM_F92 = bytes([1, 0x92, 0, 0, 15, 2, 3, 3, 3, 0, 170])
 
 
-def build_config(rate, profile, abr, cie):
-    return struct.pack('<IIIIIIIIIII', 2, rate, rate, MODE_R2, profile, 995,
-                       abr, 32, 0, 0, 40) + cie + R2_STREAM_F92
+def build_config(rate, profile, abr, cie, mtu=995, bits=32, lossless=0,
+                 qhs=0, stream=R2_STREAM_F92):
+    return struct.pack('<IIIIIIIIIII', 2, rate, rate, MODE_R2, profile, mtu,
+                       abr, bits, lossless, qhs, 40) + cie + stream
 
 
 def main():
@@ -49,6 +50,10 @@ def main():
     ap.add_argument('--bitrate-level', type=int, default=None)
     ap.add_argument('--blocks', type=int, default=40)
     ap.add_argument('--noise', action='store_true')
+    ap.add_argument('--mtu', type=int, default=995)
+    ap.add_argument('--bits', type=int, default=32)
+    ap.add_argument('--lossless', type=int, default=0)
+    ap.add_argument('--qhs', type=int, default=0)
     args = ap.parse_args()
 
     cie = {'joint': CIE_48K_JOINT_F92, 'stereo': CIE_48K_STEREO_F92, '441k': CIE_441K_STEREO_F92}[args.cie]
@@ -81,7 +86,9 @@ def main():
         return buf
 
     print('startup reply', read_exact(8).hex())
-    cfg = build_config(args.rate, args.profile, args.abr, cie)
+    cfg = build_config(args.rate, args.profile, args.abr, cie,
+                       mtu=args.mtu, bits=args.bits,
+                       lossless=args.lossless, qhs=args.qhs)
     p.stdin.write(struct.pack('<III', CONTROL, CMD_CONFIG, len(cfg)) + cfg)
     p.stdin.flush()
     print('config reply', read_exact(8).hex())
