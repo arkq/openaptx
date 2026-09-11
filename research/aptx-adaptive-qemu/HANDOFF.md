@@ -1153,3 +1153,77 @@ R3 路径不完整（游标保护返回 `-EOVERFLOW`）、以及耳机静音本�
   OTA `… 64 01 00 00 00 ae` **保留**（证明 STRIP_OTA 遗留已消失）、
   帧头 `8300d0a1`（48 kHz 立体声，速率不再被强制成 44.1 kHz）、
   217 kbps —— 与手机抓到的形态一致。
+
+---
+
+## 21. 第十一轮：空口取证执行（Ubertooth One 上场，2026-09-11）
+
+### 21.1 设备与工具链
+
+- Ubertooth One（`1d50:6002`），固件 **2020-12-R1 (API 1.07)**，与 host 工具版本一致，
+  可直接工作；设备节点是 `root:root`，需 root 调用。
+- 工具：`ubertooth-rx -z`（survey）、`-l <LAP> -u <UAP>`（跟随）、`-e <n>`（接入码容错）、
+  `ubertooth-btle -n`（BLE 广播）、`ubertooth-afh`（AFH 信道图）。
+- `air_analyse.py` 里**写死的 tshark store 路径会随 GC 失效**（本轮踩到：store 路径残缺时
+  tshark 直接 SIGBUS）——需要改成动态解析，见 §21.6。
+
+### 21.2 方法学上踩到的三个坑（都会造成"假阴性"）
+
+1. **survey 的检测能力带 ~60 秒周期**：`6a8fcc` 的静默间隔是 55/56/56/56 秒、
+   `ee02f8` 是 60/61/61/60 秒。所以"survey 里没有某个 LAP"**不能**证明链路不存在。
+2. **跟随模式命中率极低**：我们自己的 AD 链路（RSSI 饱和）80 秒只抓到 7 个包，
+   且帧头解白化失败（`packet_header=0`）→ **EDR 载荷与 LMP 基本拿不到**，
+   只有 BR 包才有载荷。
+3. **只用 `-l` 不给 `-u` 时不会进入跳频跟随**（会停在默认信道 39），必须给 UAP。
+
+### 21.3 正对照：我们自己的 AD 链路是可见的
+
+`ubertooth-rx -z` 直接看到 `LAP=c50142`（本机 AX210），RSSI 饱和（`s=0/-16`、`snr=55`）；
+`-l 0xC50142 -u 0xAA` 能锁定（`CLK6 found`）并抓到包。
+**⇒「aptX Adaptive 本身导致抓不到」不成立**，差异只能在链路层模式上。
+
+### 21.4 手机链路只在"重连瞬间"出现在标准 BR/EDR 上
+
+地址核实：手机 = HONOR 90 GT `44:90:46:40:FD:DD`（BlueZ 配对记录，CoD `0x5a420c`），
+LAP `0x40FDDD` / UAP `0x46`；耳机 = MOMENTUM 5 `80:C3:BA:B7:16:3B`（CoD `0x2c0404`，
+LMP version `0x0D`、**manufacturer `0x001D` = Qualcomm/CSR (41)**、subversion `0x75D4`）。
+注意 `0x40FCD8` 是**另一台**设备（UAP 0x4D/0xE9），与手机只差 3 bit，容易误判。
+
+三次让用户做对照动作的实验：
+
+| 实验 | 动作 | 观测 |
+|---|---|---|
+| A | 关手机蓝牙 40 秒再开 | survey 里 `40fddd` 只在**恢复瞬间**出现（t=68s，RSSI 0） |
+| B | 关耳机电源 40 秒再开 | survey 里 `40fddd` 只在**重连瞬间**出现（bin 60-70，RSSI −5…−36） |
+| C | 重连瞬间跟随 `0x40FDDD/0x46` | 跟随器**锁定成功**（`CLK100ns Trim: 5439`）并抓到 3 个包（ch 19/33，RSSI −28…−40），**之后 180 秒 0 个标准包** |
+
+稳态播放中（用户确认耳机一直有声、手机贴着 Ubertooth）：
+
+- 跟随 `0x40FDDD/0x46` 三次（100s / 60s / 90s，含 `-e 4`）→ **全部 0 包**；
+- 跟随耳机自己的 LAP `0xB7163B/0xBA` 60 秒 → 0 包；
+- 180 秒 survey → `40fddd` 0 次，而同一次 survey 里 `6a8fcc` 68 次、`ee02f8` 57 次、
+  `9ba8a3` 29 次（探测能力是够的）。
+
+### 21.5 结论：手机的 AD 音频不在标准 BR/EDR 上 ⇒ 高通 QHS
+
+- 高通 **QHS（Qualcomm High Speed）是专有物理层，速率最高 6 Mbps**，而传统蓝牙只有
+  1/2/3 Mbps；**仅在两端都支持 QHS 时生效**，且要求"不影响 LMP 状态机、可重新协商回
+  BR/EDR"（见 [高通平台蓝牙学习——QHS](https://blog.csdn.net/weixin_47456647/article/details/150919770)）。
+- 观测形态与之完全吻合：**连接/重连时走标准 BR/EDR（LMP 协商），协商完成后整条链路切到
+  QHS**；Ubertooth 只能解 1 Mbps GFSK、只能读 2/3 Mbps 的包头 → 切换后彻底看不见。
+- 反证：若音频走标准 EDR，跟随器锁定后必然持续看到 GFSK 包头（对照组 `c50142` 就是这样）。
+  **"锁定成功 + 之后完全静默"只有换物理层能解释。**
+- 手机 UI 显示 aptX Adaptive ⇒ 传输是 A2DP/AD（不是 LE Audio/LC3）⇒ 与 QHS 自洽。
+- 三个数据点一致：**能出声的源（HONOR 90 GT、FiiO BT11/QCC5181）都是高通+QHS；
+  不出声的源（AX210/Intel）没有 QHS。**
+
+### 21.6 对项目的影响与下一步
+
+- 若耳机"只在 QHS 链路上播 AD"，则**主机侧标准 EDR 的 AD 码流无论编码多正确都不会出声**
+  —— 这正好解释 §13.10「回放手机原始 PDU 仍静音」。
+- 但**尚未证明 QHS 是必要条件**（只证明了手机确实用它）。可做的廉价实验：
+  1. `APTX_ADAPTIVE_QHS_SUPPORT=1`（helper 已有该开关，当前部署为 `0`）；
+  2. OTA 版本切到 **R2.2 / Snapdragon Sound 形态 `0xaf`**（`APTX_OTA_VERSION=0xaf`）——
+     手机是骁龙设备，很可能用 Snapdragon Sound 变体而不是我们一直发的 `0xae`；
+  3. 两者组合。
+- 附带待修：`air_analyse.py` 写死的 tshark 路径。

@@ -12,13 +12,51 @@ usage: air_analyse.py <capture> [<capture> ...]
 Input is the pcap written by `ubertooth-rx -r <file>` (Bluetooth BR/EDR
 baseband).  Every section degrades gracefully: if the capture has no LMP or no
 L2CAP reassembly the corresponding table is simply empty.
+
+Capture notes learned the hard way (see HANDOFF.md section 21):
+
+* Always pass BOTH `-l <LAP>` and `-u <UAP>`: without the UAP ubertooth-rx
+  never enters hop-following mode and just sits on the default channel.
+* `ubertooth-rx -z` (survey) only detects a given piconet during windows that
+  recur roughly every 60 seconds, so "this LAP is absent from a survey" is NOT
+  evidence that the link is off the air.  Use hop-following to decide that.
+* Follow mode reports a packet only after the access code matches, and it
+  dewhitens the header with its own clock; on EDR-heavy links expect very few
+  frames and an all-zero packet header.  The absence of EDR payloads is a
+  limitation of the radio, not a property of the link.
 """
 import collections
+import glob
 import re
+import shutil
 import subprocess
 import sys
 
-TSHARK = '/nix/store/fy4pvbxfj8nj9f9pfq31i67vdp7n9csd-wireshark-cli-4.6.8/bin/tshark'
+
+def find_tshark():
+    """Locate a working tshark.
+
+    A hard-coded store path stops working as soon as that path is garbage
+    collected, and a partially collected path makes the binary die with
+    SIGBUS instead of reporting the problem.  Resolve it at run time and fail
+    with an actionable message.
+    """
+    found = shutil.which('tshark')
+    if found:
+        return found
+    for candidate in reversed(sorted(
+            glob.glob('/nix/store/*-wireshark-cli-*/bin/tshark'))):
+        try:
+            probe = subprocess.run([candidate, '-v'], capture_output=True)
+        except OSError:
+            continue
+        if probe.returncode == 0:
+            return candidate
+    raise SystemExit('tshark not found; run this inside '
+                     '`nix-shell -p wireshark-cli` or put tshark on PATH')
+
+
+TSHARK = find_tshark()
 
 # Candidate field names for the same information across Wireshark versions.
 LMP_FIELDS = ['btlmp.opcode', 'lmp.opcode', 'btbredr.lmp_opcode']
