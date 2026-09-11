@@ -9,9 +9,14 @@ own HCI and measures what was actually sent.
 
 usage: stream_check.py <capture.hci> [--expect-period-ms 25]
                        [--expect-kbytes 27] [--expect-version 0xae]
+                       [--expect-ptype 0x00]
 
-Exit status is 0 only when a media stream was found and every checked
-quantity is inside tolerance, so the tool can be used as a test gate.
+The cadence is always checked against the OTA period field itself (that field
+is in 1/15000 s units), because a form switch can keep every host-side
+property intact while the packet interval doubles -- which is exactly how a
+halved bitrate went unnoticed once.  Exit status is 0 only when a media
+stream was found and every checked quantity is inside tolerance, so the tool
+can be used as a test gate.
 """
 import argparse
 import collections
@@ -21,12 +26,16 @@ import sys
 
 # For a 48 kHz stereo aptX Adaptive R2 stream the controller sends one
 # 676-byte L2CAP payload (RTP 12 + OTA 8 + a 656-byte frame) every 25 ms,
-# which is ~27 kB/s / 217 kbps.  Anything else is a rate anomaly worth
-# stopping for -- see HANDOFF.md section 21.7.
+# which is ~27 kB/s / 217 kbps.  The R2.2 / Snapdragon Sound form instead
+# carries a 760-byte frame (780 bytes on the wire) with packet type 5.
+# Anything unexplained is a rate anomaly worth stopping for -- see
+# HANDOFF.md section 21.7.
 DEFAULT_PERIOD_MS = 25.0
 DEFAULT_KBYTES = 27.0
 DEFAULT_VERSION = 0xAE
+DEFAULT_PTYPE = 0x00
 TOLERANCE = 0.20
+OTA_TIME_UNITS_PER_SECOND = 15000.0
 
 
 def records(path):
@@ -70,6 +79,8 @@ def main():
     parser.add_argument('--expect-kbytes', type=float, default=DEFAULT_KBYTES)
     parser.add_argument('--expect-version', type=lambda x: int(x, 0),
                         default=DEFAULT_VERSION)
+    parser.add_argument('--expect-ptype', type=lambda x: int(x, 0),
+                        default=DEFAULT_PTYPE)
     args = parser.parse_args()
 
     packets = media_packets(args.capture)
@@ -89,6 +100,10 @@ def main():
     payload = packets[len(packets) // 2][2]
     ota = payload[12:20]
     ttp, period, ptype, channel, pad, version = struct.unpack('<HHBBBB', ota)
+    # The OTA period field is the encoder's own statement of the packet
+    # cadence, so the measured interval must agree with it whatever form is
+    # in use.  A mismatch means frames are being dropped or duplicated.
+    stated_ms = period * 1000.0 / OTA_TIME_UNITS_PER_SECOND
 
     print('capture           : %s' % args.capture)
     print('media packets     : %d over %.1f s' % (len(packets), span_s))
@@ -97,12 +112,14 @@ def main():
     print('throughput        : %.2f kB/s (%.0f kbps)' % (kbytes, kbytes * 8))
     print('OTA               : ttp=%d period=%d ptype=0x%02x channel=0x%02x '
           'pad=%d version=0x%02x' % (ttp, period, ptype, channel, pad, version))
+    print('OTA period implies: %.2f ms' % stated_ms)
     print('frame header      : %s' % payload[20:24].hex(' '))
 
     failures = []
     if len(sizes) > 1:
         failures.append('mixed packet sizes: %s' % sizes.most_common(3))
     for label, actual, expected in (
+            ('interval', gap_ms, stated_ms),
             ('interval', gap_ms, args.expect_period_ms),
             ('throughput', kbytes, args.expect_kbytes)):
         low, high = expected * (1 - TOLERANCE), expected * (1 + TOLERANCE)
@@ -112,16 +129,16 @@ def main():
     if version != args.expect_version:
         failures.append('OTA version 0x%02x, expected 0x%02x'
                         % (version, args.expect_version))
-    if ptype != 0x00:
-        failures.append('OTA packet type 0x%02x, expected 0x00 for the '
-                        'ordinary R2 form' % ptype)
+    if ptype != args.expect_ptype:
+        failures.append('OTA packet type 0x%02x, expected 0x%02x'
+                        % (ptype, args.expect_ptype))
 
     print()
     if failures:
         for failure in failures:
             print('FAIL: %s' % failure)
         return 1
-    print('PASS: stream matches the expected aptX Adaptive R2 form')
+    print('PASS: stream matches the expected aptX Adaptive form')
     return 0
 
 
