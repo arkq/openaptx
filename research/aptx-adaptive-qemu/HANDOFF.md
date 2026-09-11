@@ -1262,3 +1262,28 @@ CIE 字节）对比同一个 48 kHz/24 bit 音源：
 
 实验已回退：drop-in `zzz-aptx-r22-advert.conf` 已删除，`APTX_ADAPTIVE_LOSSLESS` 回到
 `off`，服务已重启，耳机已从本机断开。
+
+### 21.8 强制前置门禁（用户要求：测试前必须确认编解码与输出设备）
+
+**规则（以后每一轮都照此执行）**：任何编码器/空口测试之前先跑 `preflight.sh` 并通过；
+播放开始后再跑 `stream_check.py` 并通过。任一步不通过，该次测试结果作废。
+
+1. `preflight.sh [--fix]` —— 检查 hci0 是否 UP、耳机是否已连、card 是否落在
+   `a2dp-sink` + `api.bluez5.codec == aptx_adaptive`、以及**默认 sink 是否就是
+   MOMENTUM 5**；`--fix` 会断开重连耳机、重选 profile、把耳机设为默认 sink。
+   退出码非 0 = 不许测试。
+   存在的理由：蓝牙 card 在 A2DP profile 不可选时会**静默退到
+   `headset-head-unit`（CVSD）**，此时主机侧所有属性看起来都正常，测试结果无意义
+   （本轮实测遇到过两次）。
+2. `stream_check.py <btmon capture>` —— 从**本机 HCI** 上量真实空口形态：L2CAP 长度、
+   包间隔、吞吐、OTA 头（ttp/period/ptype/channel/version）、帧头，并与 48 kHz R2 的
+   期望值（676 B / 25 ms / 27 kB/s / ptype `0x00` / version `0xae`）比对，超差即 exit 1。
+
+两个抓包的标定结果（文件在 `/tmp`，可复现）：
+
+| 抓包 | 结果 |
+|---|---|
+| `/tmp/verify_fixed.hci`（9/10 正常流） | **PASS** 512 包、676 B、25.00 ms、27.11 kB/s、ptype `0x00`、帧头 `83 00 d0 a1` |
+| `/tmp/our-link.hci`（今晚被 `LOSSLESS=auto` 污染） | **FAIL** 6104 包、676 B、49.98 ms、13.53 kB/s、ptype `0xa0` |
+
+即 §21.7 那个"主机侧看不出来、只有量速率才发现"的异常，现在由工具自动拦住。
