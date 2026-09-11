@@ -14,9 +14,11 @@ phone's audio never appears as standard BR/EDR traffic -- its piconet is
 visible only while the link is being set up -- which first suggested that the
 headset needs a proprietary Qualcomm link. The FiiO BT11, a source that does
 play, disproves that: its link was identified by unplugging it, and it is
-ordinary BR/EDR. Both working sources do however send the Snapdragon Sound
-frame shape (packet type 5, 760-byte frames), which this host has never put on
-the air continuously, and that is the leading hypothesis now (section 7).
+ordinary BR/EDR. The BT11 reports Lossless in its own app, which would be the
+Snapdragon Sound frame shape (packet type 5, 760-byte records) -- something
+this host has never put on the air continuously. That is the leading
+hypothesis, with the caveat recorded in section 7.3: the sniffer cannot
+measure a link's throughput, so the BT11's transport is unverified.
 
 All measurements below were taken on the system described in section 2 and are
 reproducible with the tooling in this directory (section 9).
@@ -375,7 +377,7 @@ The comparison now looks like this:
 | source | link | frame form | audible |
 | --- | --- | --- | --- |
 | phone (Snapdragon) | likely QHS, invisible | only its AVDTP layer seen | yes |
-| FiiO BT11 (QCC5181) | standard EDR, visible | Lossless: type 5, 760 B | yes |
+| FiiO BT11 (QCC5181) | standard EDR, visible | Lossless per its app | yes |
 | this host | standard EDR, visible | ordinary R2: `0xae`, type 0, 656 B | no |
 
 Both working sources send the Snapdragon Sound shape (packet type 5, 760-byte
@@ -400,10 +402,17 @@ Next, in order:
 3. Once our own type-5 stream is continuous, gate it with
    `stream_check.py --expect-ptype 5 --expect-version 0xaf` and listen.
 
-A methodological lesson belongs here: hop-following is far too sparse to decide
-whether a piconet exists (0.45 packets/s on this host's own link, 0.08
-packets/s on the BT11's). A high survey hit count plus a disappearance and
-return triggered by a deliberate operator action is the reliable test.
+A methodological lesson belongs here, in two parts. Hop-following is far too
+sparse to decide whether a piconet exists (0.45 packets/s on this host's own
+link, 0.08 packets/s on the BT11's), so a high survey hit count plus a
+disappearance and return triggered by a deliberate operator action is the
+reliable test. And the sniffer cannot measure throughput at all: camping on one
+channel and counting, calibrated against this host's own link whose rate is
+known from its HCI capture (40 packets/s), recovers only 1 to 2 percent of the
+true packets, and the figure depends on RSSI. Frame lengths do not help either,
+because the Ubertooth cannot decode EDR headers. Whether the BT11's Lossless is
+real therefore cannot be settled from the air; the headset's own codec report,
+read through Sennheiser's app over BLE, is the practical check.
 
 ## 8. Reference data
 
