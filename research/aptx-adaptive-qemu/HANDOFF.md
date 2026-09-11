@@ -1226,4 +1226,39 @@ LMP version `0x0D`、**manufacturer `0x001D` = Qualcomm/CSR (41)**、subversion 
   2. OTA 版本切到 **R2.2 / Snapdragon Sound 形态 `0xaf`**（`APTX_OTA_VERSION=0xaf`）——
      手机是骁龙设备，很可能用 Snapdragon Sound 变体而不是我们一直发的 `0xae`；
   3. 两者组合。
-- 附带待修：`air_analyse.py` 写死的 tshark 路径。
+- 附带待修：`air_analyse.py` 写死的 tshark 路径（已在 `b664a90` 修掉）。
+
+### 21.7 实测：`APTX_ADAPTIVE_LOSSLESS=auto` 是一个**速率陷阱**（本轮发现）
+
+想“只恢复 R2.2 能力位、不产生 lossless 码流”，最省事的做法是把 `LOSSLESS` 从 `off`
+改成 `auto`：48 kHz/24 bit 下 `lossless_eligible` 恒为假（它要求 44.1 kHz + 16 bit），
+所以 helper 不会发 QHS/16-bit 边带反馈、也不会进 lossless 状态。**实测证明这个推理错了。**
+
+用 `btmon` 抓本机 HCI（`datalink 2001`，记录里能直接搜到 `d7 00 00 00 ad 00` 之后的
+CIE 字节）对比同一个 48 kHz/24 bit 音源：
+
+| 配置 | 媒体包 | L2CAP 长度 | 包间隔 | 吞吐 | OTA 头 |
+|---|---|---|---|---|---|
+| `LOSSLESS=off`（正常） | 487 | 676 | 25 ms | ~27 kB/s | `3c 0f 64 01 **00** 00 00 ae` |
+| `LOSSLESS=auto` | 6104 | 676 | **50 ms** | **13.53 kB/s** | `e8 83 78 01 **a0** 00 00 ae` |
+
+即：帧大小没变，但 **`packet_type` 从 `0x00` 变成 `0xa0`、包间隔翻倍到 50 ms，
+码率被砍半到 ~107 kbps** —— 这是一个用户肉眼可见的速率异常（用户实测 13.37 kB/s，
+与这里的 13.53 kB/s 一致）。**结论：`auto` 会让编码器进入 R2.2 形态，而不是“只改一个位”。**
+
+同一次实验还从 HCI 里读到了双方的 CIE（这是第一次在**我们自己的链路**上逐字节对照）：
+
+- 耳机 `GetAllCapabilities`：`d7 00 00 00 ad 00 **71 0a** … **82** 00 00 0f …`
+  （采样率 0x71、通道 0x0a、features `0x0f000082` —— 耳机**自己是支持 R2.2 的**）
+- 我们 `SetConfiguration`（`auto` 时）：`d7 00 00 00 ad 00 40 02 50 64 64 64 ff ff 00 01
+  **92** 00 00 0f 02 03 03 03 00 aa` —— 与手机 btsnoop 里的 SET_CONFIG **逐字节相同**。
+
+**即便如此耳机仍然没有任何声音。** 所以「能力位不够/CIE 不一致」这条假设可以排除了；
+结合 §21.5 的空口结论，剩下的差异只在**链路层（QHS）**。
+
+注意这次实验同时改了两个变量（能力位 + 编码器形态），所以"能力位无害"这一点**并不能**
+由它否定；要单独验证能力位，需要改插件把"对外通告 R2.2"与"编码器 lossless 模式"解耦
+（当前二者绑在同一个 `lossless_enabled()` 上）。
+
+实验已回退：drop-in `zzz-aptx-r22-advert.conf` 已删除，`APTX_ADAPTIVE_LOSSLESS` 回到
+`off`，服务已重启，耳机已从本机断开。
