@@ -411,14 +411,34 @@ standard BR/EDR receiver while it is being established, and invisible once it
 is streaming: 0 hits across 118 s (same capture), 180 s and 190 s (separate
 captures) with audio audibly playing. The claim that the whole piconet lives on
 the proprietary PHY, "even the ACL signalling", is too strong: the connection
-setup is standard. In **Lossless** mode the same pair stays visible in steady
-state (103 hits/min in the earlier unplug test) and is audible.
+setup is standard.
+
+**Lossless, same method, is indistinguishable on the air.** With the dongle
+switched to Lossless the anchored protocol gives the same picture: `0x6A8FCC`
+again (246 hits in the 31 s after reconnection, 7.7 hits/s, 39 channels, up to
+0 dBm), the headset's address during paging two seconds earlier, `0x08064F`
+**never**, and silence again in steady state (118 s in the same capture plus a
+129 s capture, audio playing). Side by side the two modes differ in nothing the
+sniffer can see:
+
+| mode | LAP | burst | steady state | `0x08064F` |
+| --- | --- | --- | --- | --- |
+| ordinary Adaptive | `0x6A8FCC` | 259 hits, 31 s, 8.4/s | 0 hits | absent |
+| Lossless | `0x6A8FCC` | 246 hits, 31 s, 7.7/s | 0 hits | absent |
+
+This contradicts the earlier Lossless anchor (`0x08064F`, 103 hits/min in steady
+state), so one of the two must be wrong -- most likely the old one, since today
+`0x08064F` appears in neither mode. It also means the air cannot tell us which
+codec the dongle is running, so that has to come from an external indication
+(the dongle's own mode display or the headset's codec readout), and a fallback
+is possible: this host feeds the dongle 44.1 kHz **24-bit**, and Lossless may
+require 16-bit input.
 
 ### 7.3 What that leaves, and the next experiments
 
 | source | mode | link | audible |
 | --- | --- | --- | --- |
-| FiiO BT11 | aptX Lossless | standard EDR, visible in steady state | yes |
+| FiiO BT11 | aptX Lossless | visible only while connecting (2026-09-12) | yes |
 | FiiO BT11 | ordinary Adaptive | visible only while connecting | yes |
 | phone (Snapdragon) | ordinary Adaptive | visible only while connecting | yes |
 | this host | ordinary Adaptive | standard EDR, visible | no |
@@ -426,9 +446,13 @@ state (103 hits/min in the earlier unplug test) and is audible.
 
 Ordinary aptX Adaptive appears to be decoded only when it arrives over a
 proprietary link, and the one host that cannot provide such a link is the one
-that stays silent. But aptX Lossless/R3 is decoded over standard EDR -- the
-BT11 demonstrates it -- so the headset does not require a Qualcomm controller
-to make sound; it requires a stream shape it recognises.
+that stays silent. The Lossless re-check points the same way: if the dongle
+really was running Lossless, then every audible source measured today keeps its
+steady-state link off standard BR/EDR, and no audible source is left that
+demonstrates audibility over standard EDR. That reading is conditional on the
+dongle's mode, which the air cannot confirm, and it matters because it decides
+whether the headset needs the proprietary PHY (as all three audible cases
+suggest) or only a stream shape it recognises.
 
 That made the R2.2/R3 path the critical one, and it has now been tested: the
 path survives the live pipeline with ABR off and the Snapdragon Sound form goes
@@ -436,10 +460,11 @@ out on the air continuously (section 6). The headset still stays silent, so the
 "wrong shape" reading of the table above is weaker than it looked and the
 remaining differences are these:
 
-1. **The version byte.** The audible Lossless source is R3 (`0xad`); what this
-   module emits is R2.2 (`0xaf`). `APTX_OTA_VERSION` can force the byte, but
-   whether the module's state machine accepts R3 without the sideband feedback
-   it expects has not been tested.
+1. **The version byte.** The audible Lossless source is reported as R3 (`0xad`)
+   -- that figure comes from the dongle's own mode reporting, not from the air,
+   which cannot read it. What this module emits is R2.2 (`0xaf`).
+   `APTX_OTA_VERSION` can force the byte, but whether the module's state machine
+   accepts R3 without the sideband feedback it expects has not been tested.
 2. **The cadence.** The audible sources run at roughly a 10 ms packet interval;
    this module is pinned to 2204 samples per frame (about 46 ms here) and no
    documented control moves it (section 4.3, and the R2.2 notes in HANDOFF
