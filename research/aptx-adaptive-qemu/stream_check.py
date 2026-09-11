@@ -9,14 +9,20 @@ own HCI and measures what was actually sent.
 
 usage: stream_check.py <capture.hci> [--expect-period-ms 25]
                        [--expect-kbytes 27] [--expect-version 0xae]
-                       [--expect-ptype 0x00]
+                       [--expect-ptype 0x01]
 
 The cadence is always checked against the OTA period field itself (that field
-is in 1/15000 s units), because a form switch can keep every host-side
-property intact while the packet interval doubles -- which is exactly how a
-halved bitrate went unnoticed once.  Exit status is 0 only when a media
-stream was found and every checked quantity is inside tolerance, so the tool
-can be used as a test gate.
+is in 0.25 ms units), because a form switch can keep every host-side property
+intact while the packet interval doubles -- which is exactly how a halved
+bitrate went unnoticed once.  Exit status is 0 only when a media stream was
+found and every checked quantity is inside tolerance, so the tool can be used
+as a test gate.
+
+The OTA header is [TTP:2][period:1][packet_type:1][channel_mode:1][pad:2]
+[version:1].  An earlier revision of this tool unpacked the period as a 16-bit
+field, which folded the packet-type byte into it and shifted every following
+field by one byte; the frame size is therefore also cross-checked against the
+packet-type table, which is what catches that class of error.
 """
 import argparse
 import collections
@@ -33,9 +39,14 @@ import sys
 DEFAULT_PERIOD_MS = 25.0
 DEFAULT_KBYTES = 27.0
 DEFAULT_VERSION = 0xAE
-DEFAULT_PTYPE = 0x00
+DEFAULT_PTYPE = 0x01
 TOLERANCE = 0.20
-OTA_TIME_UNITS_PER_SECOND = 15000.0
+# The period byte is in 0.25 ms units, confirmed on the air: a working source
+# declares 0x64 and its frames really are 25.00 ms apart.  (TTP, the 16-bit
+# field at offset 0, is the one in 1/15000 s units.)
+OTA_PERIOD_UNITS_PER_MS = 4.0
+# Payload size per packet type, from the module's own table.
+PAYLOAD_SIZES = (348, 656, 140, 152, 560, 760, 960, 348, 980)
 
 
 def records(path):
@@ -102,25 +113,32 @@ def main():
 
     payload = packets[len(packets) // 2][2]
     ota = payload[12:20]
-    ttp, period, ptype, channel, pad, version = struct.unpack('<HHBBBB', ota)
+    ttp, period, ptype, channel, pad, version = struct.unpack('<HBBBHB', ota)
     # The OTA period field is the encoder's own statement of the packet
     # cadence, so the measured interval must agree with it whatever form is
     # in use.  A mismatch means frames are being dropped or duplicated.
-    stated_ms = period * 1000.0 / OTA_TIME_UNITS_PER_SECOND
+    stated_ms = period / OTA_PERIOD_UNITS_PER_MS
+    frame_size = sizes.most_common(1)[0][0] - 20  # RTP 12 + OTA 8
 
     print('capture           : %s' % args.capture)
     print('media packets     : %d over %.1f s' % (len(packets), span_s))
     print('L2CAP length      : %s' % sizes.most_common(3))
     print('packet interval   : %.2f ms (median)' % gap_ms)
     print('throughput        : %.2f kB/s (%.0f kbps)' % (kbytes, kbytes * 8))
-    print('OTA               : ttp=%d period=%d ptype=0x%02x channel=0x%02x '
-          'pad=%d version=0x%02x' % (ttp, period, ptype, channel, pad, version))
-    print('OTA period implies: %.2f ms' % stated_ms)
+    print('OTA               : ttp=%d period=%d (%.2f ms) ptype=0x%02x '
+          'channel=0x%02x pad=%d version=0x%02x'
+          % (ttp, period, stated_ms, ptype, channel, pad, version))
+    print('codec frame       : %d bytes' % frame_size)
     print('frame header      : %s' % payload[20:24].hex(' '))
 
     failures = []
     if len(sizes) > 1:
         failures.append('mixed packet sizes: %s' % sizes.most_common(3))
+    # A packet type that disagrees with the frame actually on the wire means
+    # the header was misread (or misbuilt) -- check it before anything else.
+    if ptype < len(PAYLOAD_SIZES) and frame_size != PAYLOAD_SIZES[ptype]:
+        failures.append('frame of %d B does not match packet type 0x%02x '
+                        '(%d B)' % (frame_size, ptype, PAYLOAD_SIZES[ptype]))
     # The interval is always compared with the OTA header's own statement of
     # the cadence: whatever form is in use, a mismatch means frames are being
     # dropped or doubled.
@@ -131,6 +149,10 @@ def main():
     if args.report_only:
         print('\nREPORT ONLY: measured %s over %.2f s at %.2f ms / %.2f kB/s'
               % (sizes.most_common(1)[0][0], span_s, gap_ms, kbytes))
+        # Consistency findings are still worth seeing while forming a
+        # hypothesis, but they do not fail a report-only run.
+        for failure in failures:
+            print('NOTE: %s' % failure)
         return 0
     for label, actual, expected in (
             ('interval', gap_ms, args.expect_period_ms),

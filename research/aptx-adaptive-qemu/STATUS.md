@@ -127,7 +127,11 @@ above 60 ms) and the sink applies no back-pressure.
 
 The parser and the payload-size table live in `src/aptx-adaptive-stream.c`; the
 unit conversions were confirmed against captured streams (RTP timestamp step and
-TTP step of a working source agree at 25 ms per frame).
+TTP step of a working source agree at 25 ms per frame). The host's own stream
+declares the same byte the phone does: the OTA header on the wire is
+`3c 0f 64 01 00 00 00 ae` against the phone's `… 64 01 00 00 00 ae`, so
+`period = 100` (25.00 ms) and `packet_type = 1` (656-byte frame) on both sides.
+Section 5 item 12 records the tool bug that briefly hid this.
 
 ### 4.2 Payload-size table
 
@@ -254,8 +258,17 @@ host-clock-derived TTP (verified to advance 375-405 units per 25 ms frame).
 11. **The R2.2/Lossless path does not survive the live pipeline.** At
     44.1 kHz with a 16-bit source the module produces 780-byte R2.2 records,
     but the stream stops after 55 packets (2.7 s) and the link falls to about
-    11 B/s. The static probe harness can drive that path; the real graph
-    cannot, so the R2.2/Lossless form is unavailable rather than merely wrong.
+    11 B/s. With ABR off the path does run continuously (section 6), but the
+    headset still stays silent.
+12. **`stream_check.py` read the OTA header one byte out of step.** The tool
+    unpacked `period` as a 16-bit field, which folded the packet-type byte into
+    it (`0x64 0x01` read as `356`) and shifted every following field by one
+    byte: the value it printed as `ptype` was really `channel_mode`, and its
+    "OTA period implies" figure was meaningless. That produced a phantom
+    declared-versus-measured mismatch (23.73 ms against a real 25.00 ms) and
+    would have made the documented R2.2 gate (`--expect-ptype 5`) fail on a
+    correct stream. Fixed, with the frame size now cross-checked against the
+    packet-type table so that a misread header cannot pass again.
 
 ## 6. What has been ruled out
 
@@ -269,7 +282,8 @@ The following hypotheses were tested and are **not** the cause of the silence:
 | Low bitrate / long frames | phone frames, 16 ms (62.5 fps, 338k) | silent |
 | Wrong sample rate | 96 kHz end-to-end (`SOURCE_TYPE_1` + `0x92`) | silent |
 | Missing R2.2 version byte | replay with version `0xaf` | silent |
-| Wrong R2.2 shape | 768-byte `0xaf`/`channel_mode 0xa0` | silent |
+| Wrong R2.2 shape | 760-byte frame, `0xaf`, `channel_mode 0xa0` | silent |
+| R2.2 form, streamed live | continuous packet type 5, 760-byte frames | silent |
 | Discontinuous stream | 30 s continuous stream, zero gaps > 60 ms | normal |
 | Source device class | adapter CoD = "smartphone" (`0x5a020c`) | silent |
 | AVRCP playback state | host says `Stopped`; HD plays anyway | not a gate |
@@ -290,9 +304,20 @@ d7 00 00 00 ad 00 40 02 50 64 64 64 ff ff 00 01 92 00 00 0f ...
 ```
 
 the stream is the ordinary R2 form measured at 676 B / 25 ms / 217 kbps with
-packet type `0x00` and version `0xae`, and the operator's own link monitor read
+packet type `0x01` and version `0xae`, and the operator's own link monitor read
 26.73 kB/s against the 27.07 kB/s measured on the wire, so the data is really
 transmitted. The sink still stays silent.
+
+The R2.2 row deserves the detail it cost. With `lossless=force`, a 16-bit source
+word and ABR off, the module finally produces the **exact Snapdragon Sound form
+on the air, continuously**: version `0xaf`, packet type `0x05`, 760-byte frames
+in 780-byte L2CAP payloads, `channel_mode 0xa0`, 938 packets over 46.8 s at
+15.63 kB/s. The headset stays silent. That row used to be unreadable because the
+tool was misparsing the header (section 5 item 12): what the notes recorded as
+"packet type `0xa0`, period field 92.8 ms" is really channel mode `0xa0` and
+`period = 144`. One real inconsistency does remain in that form: the header
+declares 36.00 ms per packet while the packets are actually 46.48 ms apart,
+which matches the 2204 samples per frame the encoder consumes.
 
 Two methodology corrections belong here as well. First, several earlier runs
 negotiated 48 kHz although the phone negotiates 44.1 kHz with this headset
@@ -301,9 +326,9 @@ defines `APTX_ADAPTIVE_SAMPLING_FREQ_44100` as `0x40` and `_48000` as `0x10`);
 the "48 kHz" visible in the phone's developer options is a preference, while
 the stream follows the content. Second, an attempt to test only the capability
 bit by setting `APTX_ADAPTIVE_LOSSLESS=auto` also pushed the encoder into its
-R2.2 form (packet type `0xa0`, 50 ms interval, half the bitrate), so that run
-was inconclusive and was replaced by a plugin option that separates the element
-sent to the peer from the element handed to the encoder.
+R2.2 form (packet type `5` / channel mode `0xa0`, 50 ms interval, half the
+bitrate), so that run was inconclusive and was replaced by a plugin option that
+separates the element sent to the peer from the element handed to the encoder.
 
 In every case the sink accepts the stream at L2CAP level (writes succeed, no
 back-pressure) and produces no audio. The sink also sends **no** reverse ACL data
@@ -390,15 +415,29 @@ that stays silent. But aptX Lossless/R3 is decoded over standard EDR -- the
 BT11 demonstrates it -- so the headset does not require a Qualcomm controller
 to make sound; it requires a stream shape it recognises.
 
-That makes the R2.2/R3 path the critical one. It currently stalls after 55
-packets in the live pipeline (section 5, item 11), and until it does not, the
-shape cannot be tested at all. The next steps are:
+That made the R2.2/R3 path the critical one, and it has now been tested: the
+path survives the live pipeline with ABR off and the Snapdragon Sound form goes
+out on the air continuously (section 6). The headset still stays silent, so the
+"wrong shape" reading of the table above is weaker than it looked and the
+remaining differences are these:
 
-1. Make the R2.2/Lossless path survive the live pipeline.
-2. Gate the result with `stream_check.py --expect-ptype 5 --expect-version 0xaf`
-   and listen.
-3. Note that the project's original scope -- ordinary (non-Lossless) Adaptive
-   -- conflicts with what this headset will decode on an Intel controller.
+1. **The version byte.** The audible Lossless source is R3 (`0xad`); what this
+   module emits is R2.2 (`0xaf`). `APTX_OTA_VERSION` can force the byte, but
+   whether the module's state machine accepts R3 without the sideband feedback
+   it expects has not been tested.
+2. **The cadence.** The audible sources run at roughly a 10 ms packet interval;
+   this module is pinned to 2204 samples per frame (about 46 ms here) and no
+   documented control moves it (section 4.3, and the R2.2 notes in HANDOFF
+   21.16).
+3. **The link.** Every audible ordinary-Adaptive source reaches the headset over
+   a link a standard receiver cannot see, and the one visible-link source --
+   this host -- is silent. Whether the headset requires that PHY for ordinary
+   Adaptive is still open, but it is no longer the only candidate.
+
+The project's original scope -- ordinary (non-Lossless) Adaptive -- therefore
+conflicts with what this headset will decode from an Intel controller, and the
+one form the headset is known to accept over standard EDR (R3) is the form this
+module build cannot produce at the right cadence.
 
 A methodological lesson belongs here, in two parts. Hop-following is far too
 sparse to decide whether a piconet exists (0.45 packets/s on this host's own
@@ -445,7 +484,7 @@ however, cannot be a phase artefact.
 | `helper_probe.py`, `helper_sweep.py` | drive the helper, sweep params |
 | `raw_probe.py` | raw `set_param` probe for the proprietary module |
 | `preflight.sh` | gate: codec and sink really are aptX Adaptive |
-| `stream_check.py` | wire shape, incl. OTA self-consistency |
+| `stream_check.py` | wire shape, incl. OTA self-consistency and frame/type cross-check |
 | `cie_check.py` | compare the AVDTP codec element with the phone's |
 | `run_ad_test.sh` | gate + playback + both checks in one command |
 | `air_analyse.py` | summarise an Ubertooth BR/EDR capture |
