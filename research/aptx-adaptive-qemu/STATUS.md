@@ -427,12 +427,21 @@ sniffer can see:
 | Lossless | `0x6A8FCC` | 246 hits, 31 s, 7.7/s | 0 hits | absent |
 
 This contradicts the earlier Lossless anchor (`0x08064F`, 103 hits/min in steady
-state), so one of the two must be wrong -- most likely the old one, since today
-`0x08064F` appears in neither mode. It also means the air cannot tell us which
-codec the dongle is running, so that has to come from an external indication
-(the dongle's own mode display or the headset's codec readout), and a fallback
-is possible: this host feeds the dongle 44.1 kHz **24-bit**, and Lossless may
-require 16-bit input.
+state). The operator has confirmed that the dongle really is running Lossless,
+so the old anchor is retired as a mis-attribution and the reading is the
+uncomfortable one: **Lossless, like Adaptive, leaves standard BR/EDR once the
+media flows.** The air alone cannot distinguish the two modes -- that is the
+measurement limit -- which is exactly why the operator's indication is what
+settles it. The dongle's own behaviour when the host feeds it 24-bit audio
+(ALSA reports 44.1 kHz S24_3LE) stays unobservable from here, but it is the
+dongle's own negotiation and not something this measurement can second-guess.
+
+The steady-state negative is not an absence of evidence: a 304 s capture in
+Lossless with audio playing found 535 packets from 32 piconets, several of them
+at 40 to 80 hits, and **zero** from `0x6A8FCC`, `0x08064F` or the headset. With
+the earlier captures, that is 551 s of Lossless and 488 s of Adaptive playback
+during which the BT11's link never appeared, while the receiver was demonstrably
+working.
 
 ### 7.3 What that leaves, and the next experiments
 
@@ -446,13 +455,20 @@ require 16-bit input.
 
 Ordinary aptX Adaptive appears to be decoded only when it arrives over a
 proprietary link, and the one host that cannot provide such a link is the one
-that stays silent. The Lossless re-check points the same way: if the dongle
-really was running Lossless, then every audible source measured today keeps its
-steady-state link off standard BR/EDR, and no audible source is left that
-demonstrates audibility over standard EDR. That reading is conditional on the
-dongle's mode, which the air cannot confirm, and it matters because it decides
-whether the headset needs the proprietary PHY (as all three audible cases
-suggest) or only a stream shape it recognises.
+that stays silent. The Lossless re-check closes the loophole in that argument:
+with the dongle confirmed to be running Lossless, **every audible source
+measured here keeps its steady-state link off standard BR/EDR**, and the one
+source whose Adaptive link *is* visible while it plays -- this host -- is
+silent. The proprietary-PHY reading is therefore the one the evidence supports,
+and the rival reading ("the headset only needs a stream shape it recognises")
+has lost the observation it rested on, namely the claim that Lossless runs on
+standard EDR.
+
+That reading is what makes the R2.2/R3 experiment conclusive in the negative.
+The path was fixed until the Snapdragon Sound form went out continuously
+(section 6) and the headset still stayed silent, so producing the right stream
+is not sufficient on this controller. What remains is not a difference this host
+can remove:
 
 That made the R2.2/R3 path the critical one, and it has now been tested: the
 path survives the live pipeline with ABR off and the Snapdragon Sound form goes
@@ -460,24 +476,30 @@ out on the air continuously (section 6). The headset still stays silent, so the
 "wrong shape" reading of the table above is weaker than it looked and the
 remaining differences are these:
 
-1. **The version byte.** The audible Lossless source is reported as R3 (`0xad`)
-   -- that figure comes from the dongle's own mode reporting, not from the air,
-   which cannot read it. What this module emits is R2.2 (`0xaf`).
-   `APTX_OTA_VERSION` can force the byte, but whether the module's state machine
-   accepts R3 without the sideband feedback it expects has not been tested.
-2. **The cadence.** The audible sources run at roughly a 10 ms packet interval;
-   this module is pinned to 2204 samples per frame (about 46 ms here) and no
+1. **The version byte.** The audible Lossless source negotiates R3 (`0xad`).
+   That is a codec fact from the dongle/headset side -- the air cannot read it --
+   and it is the one concrete difference left. What this module emits is R2.2
+   (`0xaf`). `APTX_OTA_VERSION` can force the byte, but whether the module's
+   state machine accepts R3 without the sideband feedback it expects has not
+   been tested.
+2. **The cadence.** The phone's own offload configuration declares 10 ms frames;
+   for the BT11 the cadence is not measurable from here and is an assumption.
+   This module is pinned to 2204 samples per frame (about 46 ms here) and no
    documented control moves it (section 4.3, and the R2.2 notes in HANDOFF
    21.16).
-3. **The link.** Every audible ordinary-Adaptive source reaches the headset over
-   a link a standard receiver cannot see, and the one visible-link source --
-   this host -- is silent. Whether the headset requires that PHY for ordinary
-   Adaptive is still open, but it is no longer the only candidate.
+3. **The link.** Every audible source measured here -- the phone's Adaptive, the
+   BT11's Adaptive and the BT11's Lossless -- keeps its steady-state link off
+   standard BR/EDR, while the one visible-link source, this host, is silent.
+   That is now the leading explanation rather than one of two.
 
-The project's original scope -- ordinary (non-Lossless) Adaptive -- therefore
-conflicts with what this headset will decode from an Intel controller, and the
-one form the headset is known to accept over standard EDR (R3) is the form this
-module build cannot produce at the right cadence.
+The project's original goal -- ordinary Adaptive from this host's Intel
+controller -- therefore looks blocked at the link, not at the stream. The
+headset plays these codecs only from sources whose media never appears on
+standard BR/EDR, and it stays silent when a byte-identical, continuously
+streamed Adaptive or R2.2 form arrives over the standard EDR link this host can
+provide. Closing that gap would need a controller able to drive the proprietary
+high-speed link, or evidence that the headset accepts a standard-EDR stream
+under some condition not yet found.
 
 A methodological lesson belongs here, in two parts. Hop-following is far too
 sparse to decide whether a piconet exists (0.45 packets/s on this host's own
