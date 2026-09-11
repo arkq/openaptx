@@ -7,8 +7,15 @@ SET_CONFIG, the same RTP header, the same OTA header and the same codec frames
 plays aptX HD from the same host and aptX Adaptive from a phone and from a FiiO
 BT11. This report records the verified protocol facts, the host-side bugs that
 were found and fixed, and the experiments that rule out the bitstream, the AVDTP
-configuration and the wire format as the cause. The remaining gap is narrowed to
-the controller/link layer or to the sink firmware.
+configuration and the wire format as the cause.
+
+An air capture with an Ubertooth One adds the missing half: the phone's own
+aptX Adaptive audio **never appears as standard BR/EDR traffic** on the air. Its
+piconet is visible only while the link is being set up, and hop-following that
+is locked onto it hears nothing for the next three minutes. The working sources
+are both Qualcomm devices, and Qualcomm's QHS is a proprietary 6 Mbps PHY that
+a standard receiver cannot demodulate, so the remaining difference is the link
+mode, not anything the host can put in the stream.
 
 All measurements below were taken on the system described in section 2 and are
 reproducible with the tooling in this directory (section 9).
@@ -45,6 +52,7 @@ What is not solved: why the sink rejects an otherwise byte-identical stream.
 | Reference source 2 | FiiO BT11 / QCC5181 — aptX Adaptive/Lossless works |
 | Encoder | QEMU 11.1.0 `qemu-hexagon -cpu v68`, clang 22.1.8 |
 | Modules | `aptx_adaptive_enc_module.so.1`, `libaptXAdaptiveEnc3.so` |
+| Sniffer | Ubertooth One (`1d50:6002`), firmware 2020-12-R1 |
 
 The host has no Qualcomm Bluetooth controller, so the aptX Adaptive encoder is
 executed in QEMU on the Hexagon DSP module extracted from a phone firmware. The
@@ -228,6 +236,24 @@ host-clock-derived TTP (verified to advance 375-405 units per 25 ms frame).
    (48 kHz). Measured mapping: `1 -> 48 kHz`, `2 -> 44.1 kHz`, `3 -> 96 kHz`,
    anything else falls back to 48 kHz.
 8. **IMCL bitrate map units.** See 4.3: the map values are kbit/s, not bit/s.
+9. **One codec element was used for two purposes.** The element sent to the
+   peer and the element handed to the encoder were the same bytes. That makes
+   the R2.2 capability impossible to advertise on its own: telling the peer
+   about it is harmless, but showing it to the proprietary R2.2 wrapper makes
+   the wrapper wait for QHS/16-bit sideband feedback that a non-Qualcomm
+   controller cannot supply. The bridge now prepares the two from separate
+   copies (`APTX_ADAPTIVE_ADVERTISE_R2_2`).
+10. **`APTX_ADAPTIVE_LOSSLESS=auto` is a rate trap at 48 kHz.** It does not
+    merely advertise the capability: the encoder moves to the R2.2 form,
+    packet type becomes `0xa0` and the packet interval doubles to 50 ms, which
+    halves the bitrate to 13.5 kB/s. `stream_check.py` compares the measured
+    interval with the period the OTA header itself declares, which is how the
+    mismatch was caught.
+11. **The R2.2/Lossless path does not survive the live pipeline.** At
+    44.1 kHz with a 16-bit source the module produces 780-byte R2.2 records,
+    but the stream stops after 55 packets (2.7 s) and the link falls to about
+    11 B/s. The static probe harness can drive that path; the real graph
+    cannot, so the R2.2/Lossless form is unavailable rather than merely wrong.
 
 ## 6. What has been ruled out
 
@@ -246,6 +272,36 @@ The following hypotheses were tested and are **not** the cause of the silence:
 | Source device class | adapter CoD = "smartphone" (`0x5a020c`) | silent |
 | AVRCP playback state | host says `Stopped`; HD plays anyway | not a gate |
 | Encoder emitting silence | live capture decodes to 440.1 Hz | real audio |
+| Wrong link rate | 44.1 kHz and 48 kHz, ordinary R2 form | silent |
+| Capability advertisement | R2.2 bit set, encoder left on R2 | silent |
+| Byte-identical at 44.1 kHz | same element as the phone | silent |
+
+The last three rows are the strongest form of the test, and they were re-run
+under a mandatory gate (`preflight.sh`: the card must really be on
+`a2dp-sink`/`aptx_adaptive` and the MOMENTUM 5 must be the default sink) plus
+two wire checks. With the R2.2 capability advertised and the rate pinned to
+44.1 kHz, the host's codec element towards the headset is byte-identical to the
+phone's:
+
+```text
+d7 00 00 00 ad 00 40 02 50 64 64 64 ff ff 00 01 92 00 00 0f ...
+```
+
+the stream is the ordinary R2 form measured at 676 B / 25 ms / 217 kbps with
+packet type `0x00` and version `0xae`, and the operator's own link monitor read
+26.73 kB/s against the 27.07 kB/s measured on the wire, so the data is really
+transmitted. The sink still stays silent.
+
+Two methodology corrections belong here as well. First, several earlier runs
+negotiated 48 kHz although the phone negotiates 44.1 kHz with this headset
+(section 4.5 shows `0x40` in the phone's SET_CONFIG, and the plugin header
+defines `APTX_ADAPTIVE_SAMPLING_FREQ_44100` as `0x40` and `_48000` as `0x10`);
+the "48 kHz" visible in the phone's developer options is a preference, while
+the stream follows the content. Second, an attempt to test only the capability
+bit by setting `APTX_ADAPTIVE_LOSSLESS=auto` also pushed the encoder into its
+R2.2 form (packet type `0xa0`, 50 ms interval, half the bitrate), so that run
+was inconclusive and was replaced by a plugin option that separates the element
+sent to the peer from the element handed to the encoder.
 
 In every case the sink accepts the stream at L2CAP level (writes succeed, no
 back-pressure) and produces no audio. The sink also sends **no** reverse ACL data
@@ -263,27 +319,61 @@ Note that the phone's own 44.1 kHz aptX Adaptive stream towards this host is als
 `656 B / 25 ms = 210 kbps`, so the host's bitrate is normal for this codec; the
 "~50 kB/s" figure observed on the phone belongs to the aptX HD link.
 
-## 7. Remaining hypothesis
+## 7. What the air capture adds
 
-Everything observable from the host has been aligned with a working source, so
-the remaining difference is one of:
+### 7.1 The phone's audio is not standard BR/EDR traffic
 
-1. **Controller / over-the-air behaviour.** The phone offloads aptX to its
-   Qualcomm controller and the FiiO BT11 runs a QCC5181; both work. This host
-   sends plain L2CAP ACL packets from the host stack over an Intel AX210. The
-   phone's HCI log shows link-level configuration commands (Write Link Policy
-   Settings, Sniff Subrating, Enhanced Flush, Write Link Supervision Timeout)
-   that this host never issues.
-2. **Sink firmware dependence on a Qualcomm source.** If the MOMENTUM 5's
-   Adaptive decoder requires something a licensed Qualcomm source does that is
-   not visible in the L2CAP stream, no host-side change can fix it.
+An Ubertooth One was used as a passive receiver while the phone played aptX
+Adaptive to the MOMENTUM 5.
 
-The cheapest discriminating experiment is a temporary non-Intel USB Bluetooth
-dongle: if aptX Adaptive becomes audible with a different controller, the AX210
-(or Intel's link behaviour) is implicated; if it stays silent, the host stack or
-the sink firmware is. Swapping in a Qualcomm M.2 card is *not* expected to help
-by itself, because BlueZ does not use Qualcomm's aptX offload or its
-controller-to-DSP feedback path.
+The instrument is sound: the host's *own* aptX Adaptive link to the same
+headset is plainly visible (saturated RSSI, and hop-following locks onto its
+clock), so "aptX Adaptive cannot be sniffed" is false.
+
+The phone's piconet (`44:90:46:40:FD:DD`, LAP `0x40FDDD`, UAP `0x46`) behaves
+very differently. Three controlled experiments, each anchored by an action of
+the operator:
+
+| Experiment | Action | Observation |
+| --- | --- | --- |
+| A | phone Bluetooth off for 40 s | `0x40fddd` appears only as it returns |
+| B | headset power-cycled | `0x40fddd` appears only at reconnection |
+| C | hop-follow across a reconnect | locks, hears 3 packets, no more |
+
+During steady-state playback three further follow attempts (100 s, 60 s, 90 s,
+including a relaxed access-code tolerance) hear **zero** packets, following the
+headset's own LAP hears zero, and a 180 s survey does not find the phone at all
+while the same capture finds other piconets 57 to 68 times.
+
+One caveat cost time and is worth recording: in survey mode the detection of a
+given piconet recurs roughly every 60 seconds, so "not in the survey" is not
+evidence of absence. The load-bearing observation is experiment C -- a follower
+that is locked onto the piconet hears nothing more, which a standard EDR link
+cannot explain.
+
+### 7.2 Qualcomm QHS
+
+Qualcomm High Speed is a proprietary PHY rated up to 6 Mbps, where standard
+BR/EDR provides 1, 2 or 3 Mbps; it is enabled only when both ends support it,
+and it must not disturb the LMP state machine. A link that has switched to QHS
+is therefore not demodulable by an Ubertooth. That fits every observation
+above: the standard-mode exchange happens while the link is being set up, and
+the audio then rides a PHY the receiver cannot see.
+
+### 7.3 Remaining hypothesis and the next experiment
+
+Every host-controlled variable has now been tested and each one is silent, and
+the two sources that do play are Qualcomm devices (HONOR 90 GT, FiiO
+BT11/QCC5181) while the one that does not (Intel AX210) is not. The remaining
+difference is the link mode.
+
+The discriminating experiment is a Qualcomm controller in the machine (an M.2
+module, so still internal hardware, not a USB dongle). If the headset then
+plays, the gate is the link and the encoder work in this repository is usable
+as it stands; if it stays silent, the decoder depends on something else again.
+Caveat: BlueZ would still not drive Qualcomm's aptX offload, so the host would
+keep sending ordinary A2DP payload over that link -- which is exactly the
+variable under test.
 
 ## 8. Reference data
 
@@ -311,7 +401,20 @@ controller-to-DSP feedback path.
 | `acl.py` | btsnoop HCI-ACL reassembler (respects the PB flag) |
 | `helper_probe.py`, `helper_sweep.py` | drive the helper, sweep params |
 | `raw_probe.py` | raw `set_param` probe for the proprietary module |
+| `preflight.sh` | gate: codec and sink really are aptX Adaptive |
+| `stream_check.py` | wire shape, incl. OTA self-consistency |
+| `cie_check.py` | compare the AVDTP codec element with the phone's |
+| `run_ad_test.sh` | gate + playback + both checks in one command |
+| `air_analyse.py` | summarise an Ubertooth BR/EDR capture |
 | `TOOLS.md` | how to build the helper with module logging enabled |
+
+`preflight.sh` exists because the Bluetooth card silently falls back to
+`headset-head-unit` (CVSD) when the A2DP profile is not selectable, and every
+host-side property then still looks correct while the test measures nothing.
+The card fell back three times during the last round, and `--fix` repaired it
+each time by reconnecting the headset and re-selecting the profile. `btmon`
+must be running before the profile is selected, otherwise the AVDTP element is
+not in the capture; `cie_check.py` reports that case explicitly.
 
 The module's own `HAP_debug_v2` output is what made the decision chain visible.
 It is hidden behind an environment check in `compat.c`; `compat-log.c` removes
