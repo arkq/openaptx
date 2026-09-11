@@ -81,6 +81,9 @@ def main():
                         default=DEFAULT_VERSION)
     parser.add_argument('--expect-ptype', type=lambda x: int(x, 0),
                         default=DEFAULT_PTYPE)
+    parser.add_argument('--report-only', action='store_true',
+                        help='measure and print, do not apply expectations '
+                             '(for forms whose numbers are not known yet)')
     args = parser.parse_args()
 
     packets = media_packets(args.capture)
@@ -118,8 +121,18 @@ def main():
     failures = []
     if len(sizes) > 1:
         failures.append('mixed packet sizes: %s' % sizes.most_common(3))
+    # The interval is always compared with the OTA header's own statement of
+    # the cadence: whatever form is in use, a mismatch means frames are being
+    # dropped or doubled.
+    low, high = stated_ms * (1 - TOLERANCE), stated_ms * (1 + TOLERANCE)
+    if not low <= gap_ms <= high:
+        failures.append('interval %.2f outside %.2f..%.2f (OTA states %.2f)'
+                        % (gap_ms, low, high, stated_ms))
+    if args.report_only:
+        print('\nREPORT ONLY: measured %s over %.2f s at %.2f ms / %.2f kB/s'
+              % (sizes.most_common(1)[0][0], span_s, gap_ms, kbytes))
+        return 0
     for label, actual, expected in (
-            ('interval', gap_ms, stated_ms),
             ('interval', gap_ms, args.expect_period_ms),
             ('throughput', kbytes, args.expect_kbytes)):
         low, high = expected * (1 - TOLERANCE), expected * (1 + TOLERANCE)

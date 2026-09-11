@@ -4,7 +4,25 @@
 
 - helper 在 `/home/baizhu945/Documents/aptx-adaptive-runtime/helper/`
 - QEMU 在 `/nix/store/gx222l0zm41h4zqrgpb07nc0brwpv3nk-qemu-11.1.0/bin/qemu-hexagon`
-- tshark 在 `/nix/store/fy4pvbxfj8nj9f9pfq31i67vdp7n9csd-wireshark-cli-4.6.8/bin/tshark`
+- tshark 由 `air_analyse.py` 在运行时解析（PATH → 扫 store → 可用性探测）。
+  不要再写死 store 路径：路径被 GC 后 tshark 会直接 SIGBUS。
+
+## 0. 测试前置门禁（**每次测试必须先过**）
+
+- `./preflight.sh [--fix]` — hci0 UP、耳机已连、card 落在
+  `a2dp-sink` + `api.bluez5.codec == aptx_adaptive`、默认 sink 就是 MOMENTUM 5。
+  非 0 退出 = 不许测试。`--fix` 会自动断开重连耳机、重选 profile、设为默认 sink
+  （修那个静默退化成 CVSD 的坑）。
+- `python3 stream_check.py <btmon capture> [--expect-ptype N]
+  [--expect-version 0xNN] [--expect-period-ms N] [--expect-kbytes N]` —
+  从本机 HCI 量真实空口形态（L2CAP 长度/包间隔/吞吐/OTA 头/帧头），并与
+  **OTA 周期字段自己声明的节奏**交叉核对。48 kHz R2 的期望值：
+  676 B / 25 ms / 27 kB/s / ptype `0x00` / version `0xae`。
+- `python3 cie_check.py <btmon capture> [--expect-features 0xNNNNNNNN]` —
+  读出 AVDTP 里双方的能力/配置元素。手机参考值：
+  `freq=0x40 channel=0x02 features=0x0f000092`。
+- `./run_ad_test.sh [wav] [capture] [stream_check 参数…]` — 把上面三步 + 播放串起来，
+  最后提示「现在听有没有声音」。**它唯一不能替你做的是听。**
 
 ## 1. 端到端配置实验
 

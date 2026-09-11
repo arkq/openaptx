@@ -1319,3 +1319,101 @@ lossless 模式"绑在同一个 `lossless_enabled()` 上：要么清位（我们
 R2.2 状态（T3/§21.7 的坏形态）。要干净地测它，需要给插件加一个"仅对外通告 R2.2、
 不改变编码器模式"的开关（约 10 行），重建 PipeWire 后再跑一次门禁测试。
 若它仍静音，则"耳机 AD 播放依赖 QHS 链路"就是定论。
+
+### 21.10 补齐最后一个缺口的实现与准备（2026-09-11 夜，用户离开期间）
+
+**代码改动**（`baizhu945/pipewire`，本地检出 `/home/baizhu945/work/pipewire`，尚未提交）：
+
+- 新增插件开关 `APTX_ADAPTIVE_ADVERTISE_R2_2`。置 1 时：对外通告的 CIE **保留** R2.2
+  能力位（于是 features 变为 `0x0f000092`，与手机逐字节一致），但**不改变编码器模式**
+  （`lossless_mode` 仍为 `off`），因此不会触发 §21.7/T3 那个等边带反馈的停摆。
+- 实现落在 `get_advertise_r2_2()` + 两处清位条件（协商路径 + `APTX_ADAPTIVE_FEATURES`
+  覆盖路径），并在选配日志里加 `advertise-r22=` / `lossless-mode=` 两个字段。
+- **关键细节（自审时发现，必须做）**：插件原本把**同一个 CIE** 既发给对端、又发给编码器，
+  而源码注释明确写着"把 R2.2 位呈现给编码器会让 R2.2 wrapper 进入等待状态"。所以
+  `initialize_helper()` 里对**编码器那份**单独清位：对端仍看到 `0x0f000092`，编码器仍看到
+  清掉 0x80 的旧记录。否则这次实验会和 §21.7 一样被"编码器形态变化"污染。
+
+**新增两个工具**（本轮，已交付到 research 目录）：
+
+- `cie_check.py` —— 从 btmon 抓包里读出 AVDTP 双方的能力/配置元素（用 btsnoop flags
+  的方向位区分「我们发的」和「耳机发的」），可断言我们的 features 是否等于手机值
+  `0x0f000092`。**这让"通告是否与手机一致"在没有人耳的情况下也能判定。**
+- `run_ad_test.sh` —— 门禁 + 播放 + 两项校验串成一条命令，最后提示"现在听有没有声音"。
+
+**顺带发现**：插件源码里早就写着「Lossless 在 48 kHz 下耳机约 1 秒后停止读取，
+链路卡在 **~11 B/s**」（`a2dp-codec-aptx-adaptive.c` 关于 44.1 kHz 的注释）。
+用户今晚在 T3 观察到的 11 B/s 与这条既有记录完全一致 —— T3 的停摆属于已知形态，
+不是新问题。
+
+**构建状态**：`/etc/nixos/pipewire-aptx-adaptive-module.nix` 的 `src` 已**临时**指向本地
+检出（文件内注明，测试判定后要改回 pinned rev 或指向新的 fork rev）；
+`nixos-rebuild build` 已预构建（**只 build 未 switch**，所以测试前不断连）。
+用户要求：不要让蓝牙断开太久，否则耳机会自动关机 —— 因此把 switch 留到用户回来、
+可以同时听声音的那一刻，断连窗口只有几秒。
+
+**用户回来后的测试序列**（每一步都有工具兜底）：
+
+1. `nixos-rebuild switch`（store 已就绪，激活很快）；
+2. `./run_ad_test.sh`（默认带 `--fix`）→ 先跑「新插件 + 开关关闭」作为回归对照，
+   确认线形态仍是 676 B / 25 ms / 27 kB/s / ptype 0 / `0xae`；
+3. 写 drop-in `zzz-aptx-advertise-r22.conf`（`APTX_ADAPTIVE_ADVERTISE_R2_2=1`）+
+   重启两个服务（几秒），再跑 `./run_ad_test.sh`，并额外跑
+   `python3 cie_check.py <capture> --expect-features 0x0f000092` 确认通告与手机一致；
+4. **问用户：耳机里有没有声音？**
+   - 有 → 根因就是能力位，把开关做成正式特性、提交并更新 pin；
+   - 无 → 「耳机 AD 播放依赖 QHS」定论，方向转向高通控制器（如 M.2 QCNCM865，
+     仍属本机内置、不是外接 USB），并在 HANDOFF 里写明结论。
+5. 无论结果，把 `/etc/nixos/...nix` 的 `src` 从本地路径改回 pinned rev（或新 rev），
+   并把 drop-in 删掉，恢复 `LOSSLESS=off` / 通告关闭的基线。
+
+### 21.11 用户离开期间：找到并修正了采样率错误，实验已武装完毕（2026-09-11 深夜）
+
+**重大修正：我们今晚一直跑在错误的采样率上。**
+
+插件的头文件给出了权威位定义：
+
+```
+APTX_ADAPTIVE_SAMPLING_FREQ_44100 = 0x40
+APTX_ADAPTIVE_SAMPLING_FREQ_48000 = 0x10
+APTX_ADAPTIVE_SAMPLING_FREQ_96000 = 0x20
+```
+
+而手机 btsnoop 里那份 SET_CONFIG（§13）的采样率字节是 **`0x40` = 44.1 kHz**。T1/T2/T4 全部
+跑在 48 kHz（`0x10`）上 —— 用户看到的"48 kHz"是开发者选项里的**偏好设置**，实际码流跟着
+内容走（音乐基本都是 44.1 kHz）。**所以"普通 R2 @ 44.1 kHz"这个最接近手机的形态此前从未上过空口。**
+
+| # | 配置 | CIE（采样率/features） | 实测码流 | 结论 |
+|---|---|---|---|---|
+| T5 | 44.1 kHz + 普通 R2 + 通告关 | `40 02` / `0x0f000012` | 676 B / 24.99 ms / 217 kbps / ptype 0 / `0xae` / 帧头 `83 00 c0 a1` | 形态正确 |
+| T6 | 44.1 kHz + 普通 R2 + 通告开 | `40 02` / **`0x0f000092`** | 同上（**编码器仍走普通 R2**） | 与手机逐字节一致 |
+
+T6 的 CIE：`d7 00 00 00 ad 00 40 02 50 64 64 64 ff ff 00 01 92 00 00 0f` —— 与手机
+btsnoop 里那 26 个字节**完全相同**；`cie_check.py --expect-features 0x0f000092` **PASS**。
+
+**同时验证了 §21.10 的 CIE 分离改动是对的**：通告位打开后编码器没有进入 R2.2 状态，
+码流仍是 676 B / 25 ms / ptype 0 —— 若没有那份"给编码器的另一份 CIE"，这里必然重现
+§21.7 的半速/停摆形态。
+
+**顺带修正**：`run_ad_test.sh` / `cie_check.py` / `stream_check.py --report-only` 三个工具
+在本轮全部实际使用过；`stream_check.py` 现在把"实测包间隔 vs OTA 周期字段"作为**始终执行**
+的自洽检查。
+
+**当前状态（等用户回来听声音）**：drop-in
+- `zzz-aptx-force44100.conf`（`APTX_ADAPTIVE_FORCE_RATE=44100`）
+- `zzz-aptx-advertise-r22.conf`（`APTX_ADAPTIVE_ADVERTISE_R2_2=1`）
+
+两个都已生效，耳机保持连接（有看门狗防自动关机）。**这就是与手机差异最小的一份配置：
+只差链路层（QHS）。** 用户回来后执行：
+
+```bash
+cd ~/work/openaptx/research/aptx-adaptive-qemu
+./run_ad_test.sh /tmp/tone44k24.wav        # 会自动门禁 + 播放 + 两项校验
+```
+
+- **有声音** → 根因是"通告/采样率"，把开关做成正式特性、pin 到新 rev；
+- **仍静音** → 「耳机 AD 播放依赖 QHS 链路」定论（此时主机侧唯一剩余差异就是它），
+  方向转向高通控制器（M.2 QCNCM865 仍属本机内置）。
+- 听过之后记得回退：删掉那两个 drop-in（或至少 `zzz-aptx-force44100.conf`，
+  它会把所有内容重采样到 44.1 kHz），并把 `/etc/nixos/...nix` 的 `src` 从本地路径
+  改回 pinned rev。
