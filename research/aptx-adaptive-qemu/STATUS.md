@@ -9,13 +9,14 @@ BT11. This report records the verified protocol facts, the host-side bugs that
 were found and fixed, and the experiments that rule out the bitstream, the AVDTP
 configuration and the wire format as the cause.
 
-An air capture with an Ubertooth One adds the missing half: the phone's own
-aptX Adaptive audio **never appears as standard BR/EDR traffic** on the air. Its
-piconet is visible only while the link is being set up, and hop-following that
-is locked onto it hears nothing for the next three minutes. The working sources
-are both Qualcomm devices, and Qualcomm's QHS is a proprietary 6 Mbps PHY that
-a standard receiver cannot demodulate, so the remaining difference is the link
-mode, not anything the host can put in the stream.
+An air capture with an Ubertooth One adds what the host log cannot show. The
+phone's audio never appears as standard BR/EDR traffic -- its piconet is
+visible only while the link is being set up -- which first suggested that the
+headset needs a proprietary Qualcomm link. The FiiO BT11, a source that does
+play, disproves that: its link was identified by unplugging it, and it is
+ordinary BR/EDR. Both working sources do however send the Snapdragon Sound
+frame shape (packet type 5, 760-byte frames), which this host has never put on
+the air continuously, and that is the leading hypothesis now (section 7).
 
 All measurements below were taken on the system described in section 2 and are
 reproducible with the tooling in this directory (section 9).
@@ -351,29 +352,58 @@ evidence of absence. The load-bearing observation is experiment C -- a follower
 that is locked onto the piconet hears nothing more, which a standard EDR link
 cannot explain.
 
-### 7.2 Qualcomm QHS
+### 7.2 The counter-example: the BT11 plays over standard BR/EDR
 
-Qualcomm High Speed is a proprietary PHY rated up to 6 Mbps, where standard
-BR/EDR provides 1, 2 or 3 Mbps; it is enabled only when both ends support it,
-and it must not disturb the LMP state machine. A link that has switched to QHS
-is therefore not demodulable by an Ubertooth. That fits every observation
-above: the standard-mode exchange happens while the link is being set up, and
-the audio then rides a PHY the receiver cannot see.
+The FiiO BT11 (QCC5181) is a source that plays on this headset. Its link was
+identified by unplugging it for 40 s during a 300 s survey: piconet
+`0x08064F` was present with 103 hits (peak RSSI -30 dBm) before the unplug,
+**absent for the whole unplug window**, and back after the replug. That is the
+BT11 to headset link, and it is ordinary BR/EDR traffic that the sniffer reads
+without difficulty.
 
-### 7.3 Remaining hypothesis and the next experiment
+So the headset does play on a standard EDR link, and a proprietary PHY is not a
+prerequisite. QHS is best understood as an optional Qualcomm-to-Qualcomm
+optimisation: the phone's FastConnect supports it (which is why the phone's
+link was invisible), the BT11's QCC5181 apparently does not (which is why its
+link is visible), and the headset plays either way. The earlier "the headset
+requires QHS" reading of section 7.1 is therefore withdrawn.
 
-Every host-controlled variable has now been tested and each one is silent, and
-the two sources that do play are Qualcomm devices (HONOR 90 GT, FiiO
-BT11/QCC5181) while the one that does not (Intel AX210) is not. The remaining
-difference is the link mode.
+### 7.3 What that leaves, and the next experiments
 
-The discriminating experiment is a Qualcomm controller in the machine (an M.2
-module, so still internal hardware, not a USB dongle). If the headset then
-plays, the gate is the link and the encoder work in this repository is usable
-as it stands; if it stays silent, the decoder depends on something else again.
-Caveat: BlueZ would still not drive Qualcomm's aptX offload, so the host would
-keep sending ordinary A2DP payload over that link -- which is exactly the
-variable under test.
+The comparison now looks like this:
+
+| source | link | frame form | audible |
+| --- | --- | --- | --- |
+| phone (Snapdragon) | likely QHS, invisible | only its AVDTP layer seen | yes |
+| FiiO BT11 (QCC5181) | standard EDR, visible | Lossless: type 5, 760 B | yes |
+| this host | standard EDR, visible | ordinary R2: `0xae`, type 0, 656 B | no |
+
+Both working sources send the Snapdragon Sound shape (packet type 5, 760-byte
+frames), while this host has never put a type-5 stream on the air continuously
+-- its only attempt stalled after 55 packets (section 5, item 11). The leading
+hypothesis is therefore that the headset decodes the R2.2/R3 shape but not the
+plain R2 shape.
+
+One earlier row of section 6 ("wrong R2.2 shape, 768-byte `0xaf`") argues
+against this, but whether that stream was continuous was never verified and it
+probably stalled the same way, so it does not settle the question.
+
+Next, in order:
+
+1. Make the R2.2/Lossless path survive the live pipeline. This moved from
+   optional to the critical path: without a continuous type-5 stream the
+   hypothesis cannot be tested at all.
+2. If the BT11 can be switched to ordinary aptX Adaptive (its app or button),
+   have it send plain Adaptive once. If the headset still plays, the shape
+   hypothesis is wrong and the search continues; if the BT11 cannot be
+   switched, this experiment is unavailable.
+3. Once our own type-5 stream is continuous, gate it with
+   `stream_check.py --expect-ptype 5 --expect-version 0xaf` and listen.
+
+A methodological lesson belongs here: hop-following is far too sparse to decide
+whether a piconet exists (0.45 packets/s on this host's own link, 0.08
+packets/s on the BT11's). A high survey hit count plus a disappearance and
+return triggered by a deliberate operator action is the reliable test.
 
 ## 8. Reference data
 
