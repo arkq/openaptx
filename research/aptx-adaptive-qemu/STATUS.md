@@ -10,15 +10,14 @@ were found and fixed, and the experiments that rule out the bitstream, the AVDTP
 configuration and the wire format as the cause.
 
 An air capture with an Ubertooth One adds what the host log cannot show. The
-phone's audio never appears as standard BR/EDR traffic -- its piconet is
-visible only while the link is being set up -- which first suggested that the
-headset needs a proprietary Qualcomm link. The FiiO BT11, a source that does
-play, disproves that: its link was identified by unplugging it, and it is
-ordinary BR/EDR. The BT11 reports Lossless in its own app, which would be the
-Snapdragon Sound frame shape (packet type 5, 760-byte records) -- something
-this host has never put on the air continuously. That is the leading
-hypothesis, with the caveat recorded in section 7.3: the sniffer cannot
-measure a link's throughput, so the BT11's transport is unverified.
+phone's audio never appears as standard BR/EDR traffic, and neither does the
+BT11's when it streams ordinary Adaptive: in both cases the piconet is
+invisible to a standard receiver, even though the audio plays. The same BT11
+in Lossless mode runs a link that is plainly visible and also plays. Ordinary
+Adaptive therefore seems to be decoded only over a proprietary link, while
+Lossless/R3 is decoded over plain EDR -- which makes the R2.2/R3 path the one
+worth completing. Section 7 has the experiments, the operator-anchored unplug
+tests that settled it, and the measurement limits of the sniffer.
 
 All measurements below were taken on the system described in section 2 and are
 reproducible with the tooling in this directory (section 9).
@@ -354,53 +353,52 @@ evidence of absence. The load-bearing observation is experiment C -- a follower
 that is locked onto the piconet hears nothing more, which a standard EDR link
 cannot explain.
 
-### 7.2 The counter-example: the BT11 plays over standard BR/EDR
+### 7.2 The BT11 switches mode, and its piconet switches PHY
 
-The FiiO BT11 (QCC5181) is a source that plays on this headset. Its link was
-identified by unplugging it for 40 s during a 300 s survey: piconet
-`0x08064F` was present with 103 hits (peak RSSI -30 dBm) before the unplug,
-**absent for the whole unplug window**, and back after the replug. That is the
-BT11 to headset link, and it is ordinary BR/EDR traffic that the sniffer reads
-without difficulty.
+The FiiO BT11 (QCC5181) plays on this headset in both of its modes, and the
+operator can switch between them. That turns it into an experiment the fixed
+sources cannot provide, and the result is unambiguous.
 
-So the headset does play on a standard EDR link, and a proprietary PHY is not a
-prerequisite. QHS is best understood as an optional Qualcomm-to-Qualcomm
-optimisation: the phone's FastConnect supports it (which is why the phone's
-link was invisible), the BT11's QCC5181 apparently does not (which is why its
-link is visible), and the headset plays either way. The earlier "the headset
-requires QHS" reading of section 7.1 is therefore withdrawn.
+A piconet's LAP is the master's address, so the BT11 to headset link can only
+ever be `0x08064F` (the BT11 as master) or `0xB7163B` (the headset as master).
+There is no third possibility.
+
+| observation | result |
+| --- | --- |
+| Lossless, unplug test | 103 hits/min, gone for the 40 s, back on replug |
+| ordinary Adaptive, 300 s survey | both LAPs **0 hits**, audio playing |
+| ordinary Adaptive, 300 s again, with unplug | both LAPs **0 hits** |
+
+So in ordinary Adaptive mode the BT11's piconet is invisible to a standard
+BR/EDR receiver -- not just its media, since the ACL signalling of a visible
+piconet would still appear. In Lossless mode the very same pair runs a visible
+standard EDR link and is audible.
 
 ### 7.3 What that leaves, and the next experiments
 
-The comparison now looks like this:
-
-| source | link | frame form | audible |
+| source | mode | link | audible |
 | --- | --- | --- | --- |
-| phone (Snapdragon) | likely QHS, invisible | only its AVDTP layer seen | yes |
-| FiiO BT11 (QCC5181) | standard EDR, visible | Lossless per its app | yes |
-| this host | standard EDR, visible | ordinary R2: `0xae`, type 0, 656 B | no |
+| FiiO BT11 | aptX Lossless | standard EDR, visible | yes |
+| FiiO BT11 | ordinary Adaptive | invisible (proprietary PHY) | yes |
+| phone (Snapdragon) | ordinary Adaptive | invisible | yes |
+| this host | ordinary Adaptive | standard EDR, visible | no |
+| this host | aptX HD | standard EDR, visible | yes |
 
-Both working sources send the Snapdragon Sound shape (packet type 5, 760-byte
-frames), while this host has never put a type-5 stream on the air continuously
--- its only attempt stalled after 55 packets (section 5, item 11). The leading
-hypothesis is therefore that the headset decodes the R2.2/R3 shape but not the
-plain R2 shape.
+Ordinary aptX Adaptive appears to be decoded only when it arrives over a
+proprietary link, and the one host that cannot provide such a link is the one
+that stays silent. But aptX Lossless/R3 is decoded over standard EDR -- the
+BT11 demonstrates it -- so the headset does not require a Qualcomm controller
+to make sound; it requires a stream shape it recognises.
 
-One earlier row of section 6 ("wrong R2.2 shape, 768-byte `0xaf`") argues
-against this, but whether that stream was continuous was never verified and it
-probably stalled the same way, so it does not settle the question.
+That makes the R2.2/R3 path the critical one. It currently stalls after 55
+packets in the live pipeline (section 5, item 11), and until it does not, the
+shape cannot be tested at all. The next steps are:
 
-Next, in order:
-
-1. Make the R2.2/Lossless path survive the live pipeline. This moved from
-   optional to the critical path: without a continuous type-5 stream the
-   hypothesis cannot be tested at all.
-2. If the BT11 can be switched to ordinary aptX Adaptive (its app or button),
-   have it send plain Adaptive once. If the headset still plays, the shape
-   hypothesis is wrong and the search continues; if the BT11 cannot be
-   switched, this experiment is unavailable.
-3. Once our own type-5 stream is continuous, gate it with
-   `stream_check.py --expect-ptype 5 --expect-version 0xaf` and listen.
+1. Make the R2.2/Lossless path survive the live pipeline.
+2. Gate the result with `stream_check.py --expect-ptype 5 --expect-version 0xaf`
+   and listen.
+3. Note that the project's original scope -- ordinary (non-Lossless) Adaptive
+   -- conflicts with what this headset will decode on an Intel controller.
 
 A methodological lesson belongs here, in two parts. Hop-following is far too
 sparse to decide whether a piconet exists (0.45 packets/s on this host's own
@@ -410,9 +408,15 @@ reliable test. And the sniffer cannot measure throughput at all: camping on one
 channel and counting, calibrated against this host's own link whose rate is
 known from its HCI capture (40 packets/s), recovers only 1 to 2 percent of the
 true packets, and the figure depends on RSSI. Frame lengths do not help either,
-because the Ubertooth cannot decode EDR headers. Whether the BT11's Lossless is
-real therefore cannot be settled from the air; the headset's own codec report,
-read through Sennheiser's app over BLE, is the practical check.
+because the Ubertooth cannot decode EDR headers. What did settle the question
+was the operator-anchored unplug test together with the fact that a piconet LAP
+is the master's address.
+
+One survey artefact is worth recording for anyone repeating this: the detection
+of a low-traffic piconet recurs roughly every 60 s, so such a LAP shows
+spurious gaps of 25 to 78 s (`0x6a8fcc`, `0xee02f8` and `0x2ab332` all did in
+the final run). A 103 hits/min piconet going to zero across a full 300 s,
+however, cannot be a phase artefact.
 
 ## 8. Reference data
 
