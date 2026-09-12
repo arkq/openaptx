@@ -2380,3 +2380,18 @@ AX210 **架构同一**。MOMENTUM 5 真实存在且支持 Lossless（MOMENTUM 4 
    所以"两端都显示在播放"**不能**当作并发接收的证据；对照必须做成**顺序**的。
 5. `pkill -f "pw-play --target"` 会匹配到执行它的 shell 自身并把它杀掉
    （前面几次莫名的 SIGTERM 就是这个），杀播放进程用 `pkill -x pw-play`。
+
+### 21.25 已推送并向上游汇报（2026-09-12 下午）
+
+- 推送：`fork`（`baizhu945/openaptx`）的 `research/aptx-adaptive-final`，
+  `45c67f6..d2eac41`（七项实验与更正），随后 `d2eac41..afa61f7`（修 markdown-lint）。
+- 上游汇报：PR #16 评论
+  <https://github.com/arkq/openaptx/pull/16#issuecomment-5644139858>
+  （即 `UPSTREAM-PR16-UPDATE.md` 的内容：回答 "dead end?"，区分 documented/inferred，
+  并写入空口的同场阳性对照与"EDR 载荷不可解"这一限制）。
+- CI（PR #16，head `afa61f7`，71 个提交）：4 个构建配置 + markdown-lint + reuse **全部通过**。
+- lint 修复内容：STATUS.md 一处 97 字符表格行；两份上游草稿缺 h1（MD041）——
+  PR #16 草稿改为 h1 标题 + h2 小节（保持层级递增），PipeWire 草稿加短 h1。
+  已用 fence-aware 的本地检查覆盖 MD009/MD012/MD013/MD022/MD047。
+- **未做**：PipeWire（GitLab）issue #2656 的评论尚未发布——用户本次只要求 GitHub 与
+  openaptx 上游；文本已就绪在 `UPSTREAM-PIPEWIRE-2656.md`。
