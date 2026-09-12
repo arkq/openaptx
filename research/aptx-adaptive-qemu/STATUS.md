@@ -13,16 +13,23 @@ that the headset will not play, the Sennheiser app reports *aptX Adaptive
 documents *fallback* (not silence) for a codec mismatch. So negotiation
 succeeds and the sink rejects the stream later, on the link.
 
-**Everything that does play leaves the standard PHY.** Air captures with an
-Ubertooth One show that the phone's Adaptive audio never appears as standard
-BR/EDR traffic, and neither does the BT11's -- in both modes, including
-Lossless, the piconet is invisible to a standard receiver while the audio
-plays. The one source whose Adaptive traffic *is* plainly visible on standard
-EDR is this host, and it is the one that is silent. A new control experiment
-closes the last hole in that reading: the host's stream is not digital
-silence (silence encodes to a single repeated frame, pink noise and a tone
-produce fully varying frames), and the sink's silence is therefore not
-explained by anything the host sends.
+**The stream itself is not the problem either.** A three-way control through
+the same sink shows the encoder following its input: digital silence produces
+a single repeated frame (byte entropy 0.33), while pink noise and a 440 Hz
+tone produce fully varying frames (about 6.8). What the host puts on the link
+is real audio, not silence.
+
+**What the air capture does and does not show.** Within a single capture, the
+sources that play show a sharp contrast: their connection setup is clearly
+visible to an Ubertooth One while their media phase produces nothing for
+300 s or more, whereas this host's Adaptive link is visible and silent. That
+contrast is the strongest air evidence available here, but it is not proof
+that the audio leaves the standard PHY: `ubertooth-rx` does not apply the AFH
+channel map, and a published passive-capture study of an ordinary A2DP link
+recovered two orders of magnitude fewer packets than the source's own HCI
+dump. Section 7.3 states both limits and gives the cheap experiment that would
+settle it: a wideband SDR capture, or the same sniffer moved to within
+centimetres of the source.
 
 **Why a module swap does not fix it.** On the sources that work, the host never
 sends Adaptive media at all: the phone's HCI log contains no L2CAP media
@@ -62,10 +69,19 @@ What is now proven:
    silence yields a single repeated frame (byte entropy 0.33, ~1 distinct
    frame in 20 s), noise and tone yield fully varying frames (median entropy
    6.8-6.9, every frame distinct). Replayed frames therefore carry real audio.
-7. **Every source that plays leaves the standard PHY.** The phone's Adaptive
-   link and the BT11's Adaptive *and* Lossless links are invisible to an
-   Ubertooth One in steady state while the music plays; only this host's
-   Adaptive link is visible on standard EDR, and only it is silent.
+7. **The sources that play are not visible to our sniffer in steady state --
+   but that observation is weaker than it first looked.** Within one capture,
+   with the same geometry and instrument, the BT11's connection setup is
+   plainly visible (about 8 hits/s across 45 channels) while its media phase
+   produces nothing for 300 s or more. Two mundane explanations for such a
+   null are documented and were initially missed: `ubertooth-rx` never applies
+   the AFH channel map (its own ToDo says it assumes every channel is in use),
+   so a follower that locks and then diverges is expected; and a peer-reviewed
+   passive-capture study of an ordinary phone-to-speaker A2DP link recovered
+   about 300 packets where the phone's own HCI dump had 67 000. The
+   within-subject setup-versus-media contrast survives both; "the media leaves
+   standard BR/EDR" is now low-to-medium confidence, not established
+   (section 7.3).
 8. **The working sources never send Adaptive media from the host.** The
    phone's HCI log has no L2CAP media packets at all; right after AVDTP Start
    it hands the A2DP configuration to its Qualcomm controller with one vendor
@@ -578,6 +594,34 @@ spurious gaps of 25 to 78 s (`0xEE02F8` and `0x2AB332` both did in the final
 run). `0x6A8FCC` used to be listed here as a third example; it is not an
 artefact at all, it is the BT11's Adaptive piconet (section 7.2).
 
+**Two mundane explanations for the null, missed on the first pass.** First,
+`ubertooth-rx` does not apply the AFH channel map: its own ToDo records the
+assumption "that AFH is enabled but all channels are in use", so a follower
+that locks onto a piconet and then diverges from its hop sequence is an
+*expected* failure mode. That alone explains the observed pattern -- lock, a
+few packets, then minutes of silence -- with no unusual PHY involved. The fact
+that this host's own link is visible does not rule it out, since two links can
+negotiate different channel maps. Second, a peer-reviewed passive-capture
+study of an ordinary phone-to-speaker A2DP link (Lowe et al.,
+arXiv:2002.05126) recovered roughly 300 packets and 30-40 kB from the air
+where the phone's own HCI dump held about 67 000 packets and 34 MB: a
+perfectly standard link can produce a near-total null.
+
+What survives both is the *within-subject* setup-versus-media contrast: one
+capture, one geometry, one instrument, seeing a connection burst at about
+8 hits/s across 45 channels and then nothing for 300 s or more. That is
+suggestive and hard to attribute to geometry alone, but it is no longer
+decisive, and "the media leaves standard BR/EDR" should be quoted as
+low-to-medium confidence rather than as an established fact.
+
+**The cheap experiment that would settle it.** Move the sniffer to within
+centimetres of the source, and/or capture the band with a wideband SDR during
+playback. If the emission is about 1 MHz wide with 1 Msym/s GFSK structure,
+the different-PHY reading is dead; a different symbol rate or a wider spectral
+occupancy would confirm it. That one measurement discriminates between the
+remaining explanations and costs less than any hardware purchase discussed in
+this report.
+
 ### 7.4 The headset's own verdict, and where working sources send audio
 
 Three measurements close the remaining gap between "our stream" and "the
@@ -771,10 +815,11 @@ own bitrate (Qualcomm quotes 279 to 420 kbps) fits inside standard EDR without
 difficulty, so the proprietary modulation is not needed *for rate* -- the
 motivation the whitepaper actually gives is robustness.
 
-The invisibility result therefore rests on the air captures in section 7 --
-independently anchored sources, inaudible to a standard receiver while they
-play -- and not on the whitepaper. One limit of that instrument belongs here so
-the result cannot be dismissed wholesale: the Ubertooth One documents capture
+The invisibility result therefore rests on the within-subject air contrast in
+section 7.3 -- itself bounded by the AFH and sensitivity limits stated there,
+so it is suggestive rather than established -- and not on the whitepaper. One
+further limit of that instrument belongs here so the result cannot be
+dismissed wholesale: the Ubertooth One documents capture
 of Basic Rate packets and BLE only, and EDR payloads are not decodable. The
 access code and packet header of an EDR link are still GFSK, however, which is
 what survey detection uses, so a steady-state EDR link would still produce
@@ -794,6 +839,17 @@ chipset is Qualcomm (FiiO BT11 = QCC5181, Avantree DG60 Aura, Questyle
 QCC3086, Shanling UP6 = QCC5125), and no first-hand report was found of aptX
 Adaptive producing audio from an Intel controller to a Snapdragon Sound
 headset on any operating system.
+
+The cheapest way to advance this question needs no purchase at all: section
+7.3 describes a wideband SDR capture, or the same sniffer moved to within
+centimetres of the source, that discriminates between a different-PHY
+explanation and a measurement artefact. Until that runs, the case for buying
+any module rests on an observation that is not established -- and the card
+would sit in the same architectural position as the AX210 in any case:
+`btusb` and `hci_qca` treat these modules as plain HCI controllers, and
+nothing in those drivers references audio, A2DP, codecs or offload, while
+BlueZ has no aptX Adaptive definition at all and `profiles/audio/a2dp.c` has
+no occurrence of "aptx".
 
 What is practically reachable from this machine today: aptX HD on Linux
 (measured working, section 6); Adaptive and Lossless through the FiiO BT11

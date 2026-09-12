@@ -38,15 +38,22 @@ by the findings below.
    frames (entropy ≈6.8).
 4. Not a bitstream bug: replaying the Android source's own captured frames,
    with a clean monotonic TTP, is silent too.
-5. On the air (Ubertooth One): every source that *plays* — a Snapdragon phone,
-   and the FiiO BT11 in both Adaptive and Lossless — is invisible on standard
-   BR/EDR in steady state: 259 hits during a 31 s reconnection burst, then 0
-   hits for 118 s while audio plays. The only steady-state source visible on
-   standard EDR is this host, and it is the silent one. Steady-state negatives
-   total 488 s (Adaptive) and 551 s (Lossless); a 304 s control capture
-   confirmed the instrument was live (535 packets, 32 piconets). An earlier
-   reading that Lossless ran on plain EDR was withdrawn after the captures were
-   re-anchored.
+5. On the air (Ubertooth One) one *within-subject* contrast is reproducible:
+   259 hits during a 31 s reconnection burst, then 0 hits for 118 s while
+   audio plays; steady-state negatives total 488 s (Adaptive) and 551 s
+   (Lossless), and a 304 s control capture confirmed the instrument was live
+   (535 packets, 32 piconets). An earlier reading that Lossless ran on plain
+   EDR was withdrawn after the captures were re-anchored. We do **not** claim
+   from this that the audio leaves the standard PHY: `ubertooth-rx` never
+   applies the AFH channel map (its own ToDo assumes all channels are in use),
+   so a follower that locks and then diverges is an expected failure mode, and
+   a peer-reviewed passive-capture study of an ordinary phone-to-speaker A2DP
+   link recovered about 300 packets where the source's own HCI dump held
+   67 000. The setup-versus-media contrast survives both explanations, but it
+   is suggestive rather than proof. A wideband SDR capture -- or the same
+   sniffer moved to within centimetres of the source -- would settle it: about
+   1 MHz wide with 1 Msym/s GFSK structure would kill the different-PHY
+   reading, a different symbol rate or wider occupancy would confirm it.
 
 ### Mechanism found
 

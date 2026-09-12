@@ -15,9 +15,11 @@ app reports "aptX Adaptive 48 kHz". It is not a gain gate
 (`Volume = 63/127`, transport `active`) and not digital silence: known silence
 encodes to one repeated frame (entropy 0.33), pink noise and a tone to
 all-distinct frames (entropy ≈6.8). Replaying the Android source's own captured
-frames is silent too. Air captures show every source that actually plays is
-invisible on standard BR/EDR in steady state; the only steady-state source
-visible on standard EDR is this silent host.
+frames is silent too. A within-subject air capture shows a reproducible
+contrast (connection setup visible, media phase not), though the instrument's
+limits -- it never applies the AFH channel map, and passive capture of even a
+standard A2DP link recovers a small fraction of the packets -- make that
+suggestive rather than proof that the audio leaves the standard PHY.
 
 **Why a codec module alone cannot go further.** Mainline BlueZ has no aptX
 Adaptive codec id; mainline Linux has no A2DP offload at all (`hci_qca` carries

@@ -2215,3 +2215,56 @@ US20220345241A1、US20220383881A1、US20190104424A1）全是链路自适应/低�
 **已同步修改**：STATUS 开篇、§1、§4.4、§11，以及两份上游草稿
 （`UPSTREAM-PR16-UPDATE.md`、`UPSTREAM-PIPEWIRE-2656.md`）——都改成
 "高通文档只证明存在专有调制、不证明它承载音频"，并把嗅探器限制写明。
+
+**（十）第六批更正：本项目的核心观测被降级（这是最重要的一次自我更正）。**
+子代理发现**两个此前被我标为"已排除"的平凡解释**，它们都能单独解释
+"Ubertooth 锁上之后只剩沉默"：
+
+1. **`ubertooth-rx` 从不应用 AFH 信道图**。它自己的 ToDo 写着
+   "The code currently makes the assumption that AFH is enabled but all channels
+   are in use." ⇒ **跟随后偏离跳频序列是预期失效模式**，不需要任何专有 PHY。
+   ——**本机控制链路可见并不能排除它**，因为两条链路可以协商出不同的信道图。
+   我此前把它列为"已排除"是**错的**。
+2. **标准 A2DP 链路对被动嗅探本来就近乎不可见**。同行评审的被动抓包研究
+   （Lowe et al., arXiv:2002.05126，手机→音箱 A2DP）：空中只恢复约 **300 包 /
+   30–40 kB**，而手机自己的 HCI dump 有 **67 000 包 / 34.3 MB**——约 **200 倍**差距。
+   ⇒ **一条完全标准的链路也能产生近乎全零的结果。**
+
+**活下来的只有"同一抓包内 建立阶段 vs 媒体阶段"的对照**（同一仪器、同一几何：
+BT11 建连时约 8 次/秒、45 个信道；媒体阶段 300 秒以上为 0）。它仍然难以用几何
+单独解释，但**不再决定性**。
+
+**置信度下调**："高通↔高通 Adaptive 链路上发生了不寻常的事" 由 High 降为
+**Medium**；"**媒体离开了标准 BR/EDR**" 由既定事实降为 **Low–Medium**。
+⇒ 任何下游总结都**不得**再把"空口上任何信道都没有包、因此它离开了标准 PHY"
+当作已确立的事实。
+
+**没人做过、而且比买任何硬件都便宜的判定实验**：把嗅探器移到**离手机几厘米**、
+以及/或用**宽带 SDR** 在播放时抓这段频谱。若辐射约 **1 MHz 宽、呈 1 Msym/s GFSK**
+结构 ⇒ **"不同 PHY"假设直接死亡**；若符号率不同或频谱占用更宽 ⇒ 确认。
+一条测量即可区分剩余假设（已写进 STATUS §7.3）。
+
+**反向的一条发现（经 AOSP 一手来源核实）**：aptX Adaptive 在骁龙 Android 上是
+**真 offload**——AOSP 自己的 HCI requirements 页原文："The encoded audio data
+stream passes directly from the Audio processor to the BT Controller **without the
+BT host's involvement**"；Start-offload 厂商命令只带 Connection_Handle +
+L2CAP_Channel_ID + Peer_MTU（媒体路径无 codec 参数）；`btif_a2dp_source.cc` 在
+offload 时直接 early-return。**保留的限定**：这**不**证明空口用的是非标准格式
+（该命令指向的仍是标准 AVDTP/L2CAP 通道）；另外 `btaudio_offload.h` **不在 AOSP**
+（三棵 AOSP 树都没搜到），它是厂商头文件，**不得当作 AOSP 引用**。
+
+**M.2 建议现在是"有证据"而非"有推理"（方向不变）**：从 torvalds/linux 核实——
+`btusb.c`（`BTUSB_QCA_WCN6855`）与 `hci_qca.c`（wcn6855/wcn7850）把这些模块当作
+**纯 HCI 控制器**，驱动里**没有任何**音频/A2DP/codec/offload 的引用；而 BlueZ 里
+`a2dp-codecs.h` 没有 Adaptive 定义、`profiles/audio/a2dp.c` 连 "aptx" 都出现 0 次。
+⇒ **高通 M.2 卡在 Linux 上与 AX210 处于架构上完全相同的位置**。
+
+**术语再修正**：BR/EDR **没有 "2M PHY"**（那是 LE 的概念；2/3 Mbps 来自 EDR 调制
+π/4-DQPSK 与 8DPSK）——此前用法是范畴错误；专利检索两次都**无法验证权利要求文本**
+（patents.google.com 在沙箱内不可达），所以记为"**无法核实**"而非"不存在"，
+并建议干脆不引用任何专利。
+
+**净效果**：买高通 M.2 卡的理由比开始时**更弱**了——(i) 动机观测不再成立，
+(ii) 该卡在 Linux 上与 AX210 架构相同，(iii) 芯片内编码分支虽在 Android 上真实，
+但 Linux 没有任何接口。排序方向不变：**先做 §7.3 的近距离/SDR 嗅探（比买硬件便宜），
+Rank 1 的 Windows 11 24H2 仍是唯一决定性实验。**
