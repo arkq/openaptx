@@ -38,22 +38,18 @@ by the findings below.
    frames (entropy ≈6.8).
 4. Not a bitstream bug: replaying the Android source's own captured frames,
    with a clean monotonic TTP, is silent too.
-5. On the air (Ubertooth One) one *within-subject* contrast is reproducible:
-   259 hits during a 31 s reconnection burst, then 0 hits for 118 s while
-   audio plays; steady-state negatives total 488 s (Adaptive) and 551 s
-   (Lossless), and a 304 s control capture confirmed the instrument was live
-   (535 packets, 32 piconets). An earlier reading that Lossless ran on plain
-   EDR was withdrawn after the captures were re-anchored. We do **not** claim
-   from this that the audio leaves the standard PHY: `ubertooth-rx` never
-   applies the AFH channel map (its own ToDo assumes all channels are in use),
-   so a follower that locks and then diverges is an expected failure mode, and
-   a peer-reviewed passive-capture study of an ordinary phone-to-speaker A2DP
-   link recovered about 300 packets where the source's own HCI dump held
-   67 000. The setup-versus-media contrast survives both explanations, but it
-   is suggestive rather than proof. A wideband SDR capture -- or the same
-   sniffer moved to within centimetres of the source -- would settle it: about
-   1 MHz wide with 1 Msym/s GFSK structure would kill the different-PHY
-   reading, a different symbol rate or wider occupancy would confirm it.
+5. On the air: with a phone held against the antenna and audibly streaming
+   Adaptive, a 79-channel survey (it sweeps every channel, so a follower's
+   missing AFH map is irrelevant) found **zero** packets for the phone's
+   address over **307 s**. What makes that meaningful is the in-situ control:
+   the same instrument, same room, same headset, sees this host's aptX HD
+   stream at 0.7-1.6 hits/s, this host's own Adaptive stream at 0.52 hits/s,
+   and only 0.02 hits/s when that link is idle -- so the visibility is
+   media-driven, and at the control's rate the phone should have produced
+   215-460 hits. An independent single-address mode also saw zero. The
+   remaining limit: the Ubertooth cannot demodulate EDR payloads, so the claim
+   is "no access code was detected", not "we know what was sent instead"; a
+   2.4 GHz SDR would settle that part.
 
 ### Mechanism found
 

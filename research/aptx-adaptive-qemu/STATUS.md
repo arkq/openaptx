@@ -19,17 +19,16 @@ a single repeated frame (byte entropy 0.33), while pink noise and a 440 Hz
 tone produce fully varying frames (about 6.8). What the host puts on the link
 is real audio, not silence.
 
-**What the air capture does and does not show.** Within a single capture, the
-sources that play show a sharp contrast: their connection setup is clearly
-visible to an Ubertooth One while their media phase produces nothing for
-300 s or more, whereas this host's Adaptive link is visible and silent. That
-contrast is the strongest air evidence available here, but it is not proof
-that the audio leaves the standard PHY: `ubertooth-rx` does not apply the AFH
-channel map, and a published passive-capture study of an ordinary A2DP link
-recovered two orders of magnitude fewer packets than the source's own HCI
-dump. Section 7.3 states both limits and gives the cheap experiment that would
-settle it: a wideband SDR capture, or the same sniffer moved to within
-centimetres of the source.
+**What the air capture shows.** With the phone held against the antenna and
+audibly streaming Adaptive, a 79-channel survey found **zero** packets for its
+address over 307 s, while the same instrument, in the same room and to the same
+headset, found this host's aptX HD stream at 0.7 to 1.6 hits/s and this host's
+own Adaptive stream at 0.52 hits/s -- and only 0.02 hits/s with that link
+idle. That control disposes of the two mundane explanations raised against the
+earlier captures (a follower's missing AFH map, and passive capture being
+generically weak for A2DP). What it does not show is *what* the phone
+transmits: the Ubertooth cannot demodulate EDR payloads. Section 7.3 has the
+numbers and the remaining limits.
 
 **Why a module swap does not fix it.** On the sources that work, the host never
 sends Adaptive media at all: the phone's HCI log contains no L2CAP media
@@ -69,19 +68,15 @@ What is now proven:
    silence yields a single repeated frame (byte entropy 0.33, ~1 distinct
    frame in 20 s), noise and tone yield fully varying frames (median entropy
    6.8-6.9, every frame distinct). Replayed frames therefore carry real audio.
-7. **The sources that play are not visible to our sniffer in steady state --
-   but that observation is weaker than it first looked.** Within one capture,
-   with the same geometry and instrument, the BT11's connection setup is
-   plainly visible (about 8 hits/s across 45 channels) while its media phase
-   produces nothing for 300 s or more. Two mundane explanations for such a
-   null are documented and were initially missed: `ubertooth-rx` never applies
-   the AFH channel map (its own ToDo says it assumes every channel is in use),
-   so a follower that locks and then diverges is expected; and a peer-reviewed
-   passive-capture study of an ordinary phone-to-speaker A2DP link recovered
-   about 300 packets where the phone's own HCI dump had 67 000. The
-   within-subject setup-versus-media contrast survives both; "the media leaves
-   standard BR/EDR" is now low-to-medium confidence, not established
-   (section 7.3).
+7. **A source that plays Adaptive is not detectable on standard BR/EDR, while a
+   standard-EDR link to the same headset is.** Survey mode sweeps all 79
+   channels, so the AFH limitation of follower mode does not apply: a phone
+   held against the antenna produced **zero** hits for its address over 307 s
+   of audible Adaptive playback. The in-situ control rules out a blind
+   instrument -- the same host streaming aptX HD to the same headset is seen at
+   0.7 to 1.6 hits/s, this host's own Adaptive stream at 0.52 hits/s, and the
+   same link idle at 0.02 hits/s. Had the phone's link emitted like the control,
+   215 to 460 hits were expected (section 7.3).
 8. **The working sources never send Adaptive media from the host.** The
    phone's HCI log has no L2CAP media packets at all; right after AVDTP Start
    it hands the A2DP configuration to its Qualcomm controller with one vendor
@@ -594,33 +589,50 @@ spurious gaps of 25 to 78 s (`0xEE02F8` and `0x2AB332` both did in the final
 run). `0x6A8FCC` used to be listed here as a third example; it is not an
 artefact at all, it is the BT11's Adaptive piconet (section 7.2).
 
-**Two mundane explanations for the null, missed on the first pass.** First,
-`ubertooth-rx` does not apply the AFH channel map: its own ToDo records the
-assumption "that AFH is enabled but all channels are in use", so a follower
-that locks onto a piconet and then diverges from its hop sequence is an
-*expected* failure mode. That alone explains the observed pattern -- lock, a
-few packets, then minutes of silence -- with no unusual PHY involved. The fact
-that this host's own link is visible does not rule it out, since two links can
-negotiate different channel maps. Second, a peer-reviewed passive-capture
-study of an ordinary phone-to-speaker A2DP link (Lowe et al.,
-arXiv:2002.05126) recovered roughly 300 packets and 30-40 kB from the air
-where the phone's own HCI dump held about 67 000 packets and 34 MB: a
-perfectly standard link can produce a near-total null.
+**Two mundane explanations for the null, and why both are now excluded.** Two
+objections were raised against the earlier captures and needed testing rather
+than assuming. First, `ubertooth-rx` does not apply the AFH channel map (its own
+ToDo assumes every channel is in use), so a *follower* that locks and then
+diverges is an expected failure mode. Second, a peer-reviewed passive-capture
+study of an ordinary phone-to-speaker A2DP link (Lowe et al., arXiv:2002.05126)
+recovered only about 300 packets where the phone's own HCI dump held 67 000, so
+a standard link can look nearly invisible.
 
-What survives both is the *within-subject* setup-versus-media contrast: one
-capture, one geometry, one instrument, seeing a connection burst at about
-8 hits/s across 45 channels and then nothing for 300 s or more. That is
-suggestive and hard to attribute to geometry alone, but it is no longer
-decisive, and "the media leaves standard BR/EDR" should be quoted as
-low-to-medium confidence rather than as an established fact.
+Both were then measured in situ. The AFH objection applies to follower mode
+only: the run below uses **survey** mode, which sweeps all 79 channels and
+therefore cannot be blinded by a channel map. The sensitivity objection is
+answered by an in-situ positive control at the same distance to the same sink.
 
-**The cheap experiment that would settle it.** Move the sniffer to within
-centimetres of the source, and/or capture the band with a wideband SDR during
-playback. If the emission is about 1 MHz wide with 1 Msym/s GFSK structure,
-the different-PHY reading is dead; a different symbol rate or a wider spectral
-occupancy would confirm it. That one measurement discriminates between the
-remaining explanations and costs less than any hardware purchase discussed in
-this report.
+| State (same room, same instrument, same headset) | Time | Phone `40fddd` | This host `c50142` |
+| --- | --- | --- | --- |
+| Phone plays Adaptive, host radio off | 109 s | **0** | -- |
+| Phone plays Adaptive, host idle | 99 s | **0** | 2 |
+| Phone plays Adaptive, host idle | 99 s | **0** | 2 |
+| Host streams aptX HD (standard EDR) | 109 s | 0 | **160** |
+| Host streams aptX HD | 99 s | 0 | **93** |
+| Host streams aptX HD | 98 s | 0 | **83** |
+| Host streams aptX HD | 100 s | 0 | **68** |
+| Host streams Adaptive (standard EDR) | 100 s | 0 | **52** |
+
+The phone was held against the antenna and audibly playing for all 307 s of the
+first three rows, with **zero** packets for its address. The same host's own
+Adaptive link is plainly visible (0.52 hits/s) and, tellingly, the host's link
+yields only 0.02 hits/s when idle: the visibility is **media-driven**, which is
+exactly the traffic class the phone is producing. At the control's rate of 0.7
+to 1.6 hits/s, the phone's 307 s should have produced 215 to 460 hits. An
+independent mode aimed at that single address (`ubertooth-rx -l 40fddd`, 60 s)
+also saw zero packets, and could not derive its UAP.
+
+What this establishes is narrower than "the audio leaves the Bluetooth PHY", and
+it should be quoted that way: **an audibly streaming Adaptive link emits nothing
+that a standard BR/EDR receiver can detect, whereas a standard-EDR link to the
+same headset under identical conditions is detected readily.** The remaining
+limit is that the Ubertooth cannot demodulate EDR payloads at all, so the
+measurement says "no access code was detected", not "here is what was
+transmitted instead". Measuring the actual emission needs a 2.4 GHz SDR (for
+example an ADALM-Pluto or HackRF): about 1 MHz wide with 1 Msym/s GFSK
+structure would kill the different-PHY reading, while a different symbol rate or
+wider spectral occupancy would confirm it.
 
 ### 7.4 The headset's own verdict, and where working sources send audio
 
@@ -815,15 +827,17 @@ own bitrate (Qualcomm quotes 279 to 420 kbps) fits inside standard EDR without
 difficulty, so the proprietary modulation is not needed *for rate* -- the
 motivation the whitepaper actually gives is robustness.
 
-The invisibility result therefore rests on the within-subject air contrast in
-section 7.3 -- itself bounded by the AFH and sensitivity limits stated there,
-so it is suggestive rather than established -- and not on the whitepaper. One
-further limit of that instrument belongs here so the result cannot be
-dismissed wholesale: the Ubertooth One documents capture
-of Basic Rate packets and BLE only, and EDR payloads are not decodable. The
-access code and packet header of an EDR link are still GFSK, however, which is
-what survey detection uses, so a steady-state EDR link would still produce
-hits; the zero counts remain meaningful even though payloads could not be read.
+The invisibility result therefore rests on the in-situ air measurement in
+section 7.3 -- a 79-channel survey with an in-situ positive control, in which an
+audibly streaming Adaptive link produced zero detections in 307 s while a
+standard-EDR link to the same headset under the same conditions produced 0.7 to
+1.6 hits/s -- and not on the whitepaper. One limit of that instrument belongs
+here so the result cannot be dismissed wholesale: the Ubertooth One documents
+capture of Basic Rate packets and BLE only, and EDR payloads are not decodable.
+The access code and packet header of an EDR link are still GFSK, however, which
+is what survey detection uses, so a steady-state EDR link would still produce
+hits; the zero counts remain meaningful even though payloads could not be read,
+and the control shows the instrument does see such links in this very setup.
 
 One independent confirmation of the shape of the problem: Sennheiser's own
 BTD 700 dongle is documented as supporting "aptX Adaptive, including the aptX
