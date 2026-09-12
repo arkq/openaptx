@@ -840,6 +840,18 @@ QCC3086, Shanling UP6 = QCC5125), and no first-hand report was found of aptX
 Adaptive producing audio from an Intel controller to a Snapdragon Sound
 headset on any operating system.
 
+The cleanest single support is architectural, and it comes from Qualcomm's own
+whitepaper. Its component diagram splits the system into a mobile-platform half
+(Snapdragon platform, FastConnect, Aqstic audio) and a headset/earbud half that
+lists the Bluetooth Audio SoC (QCC515x/514x/3056) together with "aptX Adaptive
+Audio"; the text then says Qualcomm "supports this end-to-end between Qualcomm
+FastConnect mobile connectivity systems and low power Bluetooth audio SoCs".
+FastConnect is the connectivity half, and the audio half is a *different* chip.
+The module discussed here is therefore, by Qualcomm's own architecture, the
+wrong half of the system -- and on Linux it would additionally be driven as a
+plain HCI controller, since `btusb.c`, `hci_qca.c` and `btqca.c` contain no
+audio, A2DP, codec or offload references at all.
+
 The cheapest way to advance this question needs no purchase at all: section
 7.3 describes a wideband SDR capture, or the same sniffer moved to within
 centimetres of the source, that discriminates between a different-PHY

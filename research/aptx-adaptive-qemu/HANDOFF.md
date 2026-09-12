@@ -2204,9 +2204,9 @@ GFSK**，而 survey 检测用的正是它 ⇒ **"零命中"依然有意义**（�
 独立印证了"关键的硅在**源端的音频设备**里，而不在主机 SoC 里"——与 §21.21(五)
 的手机 offload 证据指向同一个模型。
 
-**专利：负结果，不要引用任何专利。** 检索到的候选（US20190007850A1、
-US20220345241A1、US20220383881A1、US20190104424A1）全是链路自适应/低时延专利，
-无一提到 High Speed Link。
+**专利（此条已被（十一）更正）**：早期结论是"负结果、不要引用任何专利"。
+检索到的候选里**有错认**——详见 §21.23(十一)：其中 US20190104424A1 实际是 Apple 的，
+另有两条是华为的。**不要把这三条当高通专利引用。**
 
 **术语修正**：aptX Lossless 速率用高通口径 "up to 1 Mbit/s"（流传的 1.1–1.2 Mbps
 来自 What Hi-Fi 对高通简报的转述）；R2/R2.2/R3 是社区标签，高通公开名只有
@@ -2268,3 +2268,50 @@ offload 时直接 early-return。**保留的限定**：这**不**证明空口用
 (ii) 该卡在 Linux 上与 AX210 架构相同，(iii) 芯片内编码分支虽在 Android 上真实，
 但 Linux 没有任何接口。排序方向不变：**先做 §7.3 的近距离/SDR 嗅探（比买硬件便宜），
 Rank 1 的 Windows 11 24H2 仍是唯一决定性实验。**
+
+**（十一）第七批（终批）更正：专利建议反转 + 一处错认 + 最强的一条架构证据。**
+
+1. **专利：可以窄引一条，但只能当"架构/意图"证据。** 早前"不要引用任何专利"作废。
+   检索改走 `image-ppubs.uspto.gov`（官方 USPTO PDF，无文本层，需栅格化读第 1 页）后
+   拿到一条可用的：
+   **US 2020/0075032 A1 "Power Optimized Link Quality Detection and Feedback"（高通）**
+   摘要原文："A Bluetooth component (e.g., a Bluetooth chip) and a digital signal
+   processing (DSP) component (e.g., an audio DSP) of a device may directly handle
+   link condition sensing (e.g., link quality monitoring) and audio bitrate
+   determination…" ⇒ 它主张的正是 **"蓝牙芯片 + 音频 DSP"分工**——即 A2DP offload
+   实现的那套结构，也正是"x86 主机 + 光板 HCI 控制器"**所缺**的东西。
+   **引用边界**：只作架构/意图证据；**未读权利要求 1、未核实优先权日**。
+   **仍然没有**找到任何"高速/专有蓝牙音频传输"专利，也**没有**任何 aptX 家族专利
+   —— 这是**检索负结果，不是文档负结果**（没有可全文检索的官方库）。
+   ⇒ **没有任何专利支持"专有链路存在"。**
+
+2. **错认警告（必须记住）**：搜索引擎会把三条专利当"高通 aptX 相关"呈现，
+   实际都不是高通——`US 11,715,478 B2` 与 `US 11,749,290 B2`（"High Resolution Audio
+   Coding"）是**华为**（发明人 Yang Gao）；`US 2019/0104424 A1`（"Ultra-Low Latency
+   Audio over Bluetooth"）是**苹果**。**这三条不得作为高通专利引用**（已列入报告
+   的 do-not-cite 名单；本笔记 §21.23(九) 的相应句子已加更正指引）。
+
+3. **最强的一条架构证据（已核实自白皮书 PDF 正文）**：白皮书第 4 页把组件图分成两半——
+   **移动平台侧**：Snapdragon 888 平台 · **FastConnect 6900** · Aqstic 音频 codec/amp；
+   **耳机/耳塞侧**：Qualcomm **蓝牙音频 SoC（QCC515x/514x/3056）** · TrueWireless
+   Mirroring · ANC · **aptX Adaptive Audio** · aptX Voice。
+   第 5 页原文："Qualcomm supports this end-to-end between Qualcomm® FastConnect™
+   mobile connectivity systems and low power Bluetooth audio SoCs."
+   ⇒ **FastConnect 是"连接"的那一半；"音频"的那一半是另一颗芯片。**
+   用户考虑的那张卡，按高通自己的架构就是**系统的另一半**（错的一半）。
+   这条 + btusb/hci_qca/btqca 零音频引用 + BlueZ 无 Adaptive 定义
+   ⇒ "不要换卡"从**推理**升级为**有证据**。
+
+4. **顺带记录一个"命名但未定义"的机制**：白皮书第 7 页提到
+   "support for **DSP tunnelling**"，全文**从未定义**它。**不得当作任何证据使用**——
+   这已经是高通第二次为"手机↔耳塞音频通路"命名而不公布其含义。
+
+**最终证据地图（对外表述请照此）**：
+`Qualcomm High Speed Link` = 真实、已注册商标、**调制**技术、4 dB 健壮性增益 → **已文档化**
+（一级 PDF）；文档定位为健壮性/距离，**不是**绕过 BR/EDR 的媒体通道；未给速率。
+"QHS" 是社区叫法。Ubertooth 的零结果**弱于**最初假设（AFH 图未应用 + 标准 A2DP 被动
+抓包 ~200 倍落差），**只有"同一抓包内 建立 vs 媒体"的对照**可承重。A2DP offload 是
+**已文档化**的"主机无痕迹"机制，但**不**证明空口格式非标准。Linux 上高通 M.2 卡与
+AX210 **架构同一**。MOMENTUM 5 真实存在且支持 Lossless（MOMENTUM 4 不支持）。
+**建议不变：留着 AX210；BT11 已经满足目标；唯一决定性实验是 QCNCM865 + Win11 24H2；
+最便宜的下一步是 §7.3 的 SDR/近距离嗅探，而不是购买。**
