@@ -52,16 +52,33 @@ by the findings below.
 
 In an Android HCI log of a Snapdragon source, the entire session contains **no
 L2CAP media packets at all**. Immediately after AVDTP Start there is a single
-vendor command (`0xFC0A`, 66-byte payload) carrying the A2DP configuration.
-The controller encodes on-chip. Qualcomm's Snapdragon Sound material documents
-"Qualcomm High Speed Link modulation" (4 dB link-budget gain, "advanced
-modulation and coding techniques", fewer retransmissions) — a modulation-level
-change, consistent with a standard BR/EDR sniffer observing nothing.
+vendor command (`0xFC0A`, 66-byte payload) carrying the A2DP configuration, and
+the host never sends Adaptive media for the rest of the session. The controller
+encodes on-chip.
 
-**Documented:** High Speed Link modulation; AOSP's standardised A2DP-offload
-codec list, which has no Adaptive bit; mainline BlueZ and upstream PipeWire
-having no aptX Adaptive codec id. **Inferred, not documented:** that aptX
-Adaptive *requires* High Speed Link.
+Qualcomm's Snapdragon Sound whitepaper names a proprietary link technology:
+"a 4dB gain using Qualcomm High Speed Link modulation and a further 2dB gain
+using Qualcomm aptX Adaptive. Fewer retries and less time on the radio ...
+Advanced modulation and coding also help to deliver increased end-to-end
+Bluetooth link robustness", and the trademark page of the same document lists
+"Qualcomm High Speed Link" as a Qualcomm product.
+
+**Documented:** that Qualcomm ships a proprietary link modulation under that
+name; that AOSP's standardised A2DP-offload codec list contains no Adaptive
+bit; that mainline BlueZ and upstream PipeWire have no aptX Adaptive codec id.
+**Inferred, not documented:** that this modulation is what carries Adaptive
+audio, or that Adaptive *requires* it. Two reasons to keep that inference
+tentative: the whitepaper presents the feature as a robustness and range gain
+rather than as a media path; and Qualcomm quotes Adaptive at 279 to 420 kbps,
+which fits inside standard EDR without difficulty, so a proprietary modulation
+is not needed *for rate*. Note as well that "QHS" is community shorthand -- the
+acronym does not appear in Qualcomm's document.
+
+One limit of the air measurement, so that it is not overread: the Ubertooth One
+documents Basic Rate and BLE capture only, and cannot decode EDR payloads. An
+EDR link's access code and header are still GFSK, so survey detection still
+sees such a link; the zero counts are meaningful, but they count detected
+packets, not decoded audio.
 
 ### Value to upstream
 

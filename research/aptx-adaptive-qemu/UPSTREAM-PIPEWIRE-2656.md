@@ -24,9 +24,11 @@ Adaptive codec id; mainline Linux has no A2DP offload at all (`hci_qca` carries
 only HFP voice offload); and the transport shipping Qualcomm sources actually
 use is controller-side: in an Android HCI log the session contains no L2CAP
 media packets, and a single vendor command (`0xFC0A`, 66-byte payload) carries
-the A2DP configuration right after AVDTP Start, alongside Qualcomm's documented
-"High Speed Link modulation". That part is not reachable from a host codec
-plugin.
+the A2DP configuration right after AVDTP Start. Qualcomm's own Snapdragon Sound
+whitepaper additionally names a proprietary "Qualcomm High Speed Link"
+modulation, presented there as a robustness and range feature (the document
+does not say it carries the audio, and Adaptive's 279-420 kbps fits standard
+EDR). None of that is reachable from a host codec plugin.
 
 **What would make this useful upstream** is any non-Qualcomm controller that a
 headset will actually decode — i.e. a data point where aptX Adaptive audio is

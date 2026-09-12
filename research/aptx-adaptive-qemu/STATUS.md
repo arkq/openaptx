@@ -27,11 +27,11 @@ explained by anything the host sends.
 **Why a module swap does not fix it.** On the sources that work, the host never
 sends Adaptive media at all: the phone's HCI log contains no L2CAP media
 packets, and immediately after AVDTP Start it hands the A2DP configuration to
-its Qualcomm controller in a single vendor command. The controller encodes
-on-chip and transmits over Qualcomm's documented "High Speed Link modulation".
-Mainline Linux has none of that: BlueZ has no aptX Adaptive codec id, there is
-no A2DP offload in `hci_qca`, and an M.2 card in a laptop has no audio bus to
-its controller. A 914-line due-diligence report is summarised in section 11.
+its Qualcomm controller in a single vendor command, after which the chip
+encodes on-chip. Mainline Linux has none of that: BlueZ has no aptX Adaptive
+codec id, there is no A2DP offload in `hci_qca`, and an M.2 card in a laptop
+has no audio bus to its controller. A due-diligence report on the module
+question itself is summarised in section 11.
 
 All measurements below were taken on the system described in section 2 and are
 reproducible with the tooling in this directory (section 9).
@@ -75,10 +75,13 @@ What is now proven:
 What is settled: the bitstream, the AVDTP element, the wire format, the volume
 and the negotiation are all fine, so the rejection is at the link. What is
 *not* settled: the exact mechanism, which is undocumented. The best-supported
-reading is Qualcomm's documented "High Speed Link modulation" -- a
-link-budget feature that changes the over-the-air waveform, which is exactly
-what would make a working stream invisible to a standard receiver (sections
-7.4 and 11).
+reading is a Qualcomm-proprietary modulation -- "Qualcomm High Speed Link",
+named and trademarked in Qualcomm's own Snapdragon Sound whitepaper, and a
+plausible reason a working stream would be invisible to a standard receiver.
+Two honest limits belong with it: that document describes the feature as a
+robustness gain rather than as a media path, so "the audio leaves the PHY" is
+an inference from our captures; and the invisibility evidence itself is the
+air capture in section 7, not the whitepaper (sections 7.4 and 11).
 
 ## 2. Hardware and system
 
@@ -216,6 +219,11 @@ bit set) towards the MOMENTUM 5 and `0x0f000017` (no R2.2 bit) towards this host
 because the negotiated feature word propagates the peer's `0x80` bit. The host
 advertises `0x92` towards the headphone but its encoder stays at level <= 5 and
 therefore emits `0xae` frames.
+
+A terminology note for readers coming from the community literature: the
+labels R2, R2.2 and R3 used throughout this report are shorthand derived from
+those OTA version bytes (`0xae`, `0xaf`, `0xad`). Qualcomm's only public name
+for the family is "aptX Adaptive 2.0".
 
 ### 4.5 The frame-type byte encodes the sample rate *and* the channel count
 
@@ -744,13 +752,41 @@ independent reasons, in increasing order of force:
    the card's NVM that then breaks Linux Bluetooth audio (fix unmerged as of
    7.3-rc2).
 
-On the mechanism itself, the best-supported reading is Qualcomm's documented
-"High Speed Link modulation" -- Snapdragon Sound material credits it with a
-4 dB link-budget gain alongside "advanced modulation and coding techniques".
-The acronym "QHS" is community shorthand and appears in no Qualcomm document,
-and that aptX Adaptive *requires* this link is an inference, not a documented
-requirement. It is, however, the only reading that fits every measurement in
-sections 6, 7 and 7.4.
+On the mechanism itself, what is documented and what is inferred must be kept
+apart. Qualcomm's own Snapdragon Sound whitepaper says, verbatim: "a 4dB gain
+using Qualcomm High Speed Link modulation and a further 2dB gain using
+Qualcomm aptX Adaptive. Fewer retries and less time on the radio ... Advanced
+modulation and coding also help to deliver increased end-to-end Bluetooth link
+robustness", and the same document's trademark page lists "Qualcomm High Speed
+Link" as a Qualcomm product. A Qualcomm-proprietary modulation therefore
+demonstrably exists.
+
+Three things that document does *not* say, and that should not be smuggled in
+with it. First, the acronym "QHS" never appears in it -- that spelling is
+community shorthand, not Qualcomm's. Second, it presents High Speed Link as a
+*robustness and range* gain, not as a media pipe that bypasses BR/EDR;
+reading our invisible captures as "the audio leaves the Bluetooth PHY" is an
+inference from our own measurements, not a quotation. Third, aptX Adaptive's
+own bitrate (Qualcomm quotes 279 to 420 kbps) fits inside standard EDR without
+difficulty, so the proprietary modulation is not needed *for rate* -- the
+motivation the whitepaper actually gives is robustness.
+
+The invisibility result therefore rests on the air captures in section 7 --
+independently anchored sources, inaudible to a standard receiver while they
+play -- and not on the whitepaper. One limit of that instrument belongs here so
+the result cannot be dismissed wholesale: the Ubertooth One documents capture
+of Basic Rate packets and BLE only, and EDR payloads are not decodable. The
+access code and packet header of an EDR link are still GFSK, however, which is
+what survey detection uses, so a steady-state EDR link would still produce
+hits; the zero counts remain meaningful even though payloads could not be read.
+
+One independent confirmation of the shape of the problem: Sennheiser's own
+BTD 700 dongle is documented as supporting "aptX Adaptive, including the aptX
+Lossless and 24 bit / 96 kHz" and as handling "the codec itself" for sources
+that do not support the advanced codecs. That is a USB dongle rather than a
+Snapdragon phone, and it points the same way as the Android HCI log: the
+Qualcomm silicon that matters sits in the audio device at the source end, not
+in the host.
 
 Two corpus-level facts are worth recording because they make this negative
 result more useful than it looks. Every confirmed aptX Adaptive transmitter

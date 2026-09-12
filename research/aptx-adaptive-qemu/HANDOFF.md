@@ -2161,3 +2161,57 @@ QCNCM865 依然是两者中对蓝牙音频**更冒险**的那个；且**Linux �
 缺了会报 `failed to load ath11k/WCN6855/hw2.1/amss.bin (-2)`（Debian #1026028）；
 不要把 ThinkPad X13s 的"高通蓝牙射频差/2–3 m"结论套到这些卡上——那是
 **UART 接法**（`qca_uart_setup()`），M.2 卡是 USB（`btusb`）。
+
+**（九）第五批更正：QHS 证据升级到高通白皮书原文，但"必要性"论证同时被削弱。**
+子代理直接下载并解析了高通自己的 Snapdragon Sound 白皮书
+（`qul7325_snapdragon_whitepaper_r7.pdf`）。第 7 页**原文**：
+
+> "Snapdragon Sound is designed to deliver robust connectivity with a 4dB gain
+> using Qualcomm High Speed Link modulation and a further 2dB gain using
+> Qualcomm aptX Adaptive. Fewer retries and less time on the radio supports
+> better Wi-Fi coexistence and a more robust overall connection. Advanced
+> modulation and coding also help to deliver increased end-to-end Bluetooth
+> link robustness, improving range and stability, despite interference."
+
+第 11 页商标行把 "Qualcomm High Speed Link" 列为高通产品 ⇒
+**"存在一种高通专有调制技术"是已文档化的（高置信）**。
+
+但该文档**没有**说的三件事，绝不能顺手夹带：
+
+1. **全文没有 "QHS" 这个缩写**（PDF 内出现 0 次）。唯一把 "QHS" 定义成一种蓝牙
+   模式的来源是一篇疑似 AI 生成的付费 CSDN 博客（它凭空造出 "LEHS" 物理层与
+   6 Mbps 数字，无任何旁证）。⇒ 正确表述是"**Qualcomm High Speed Link 有文档；
+   QHS 是社区叫法**"。顺带注意：高通命名里的 "HS" 通常指 **HS-USB**
+   （QDLoader 9008 / Diagnostics 9006），快速充电叫 QC 不叫 QHS。
+2. 白皮书把它定位成**健壮性/距离**增益（"fewer retries and less time on the
+   radio"），**不是**"绕过 BR/EDR 的媒体通道"。把我们的观测读成"音频离开了
+   蓝牙 PHY"是**我们的推断**，不是文档的话。
+3. **带宽论证反过来削弱"必要性"**：高通自己给 aptX Adaptive 的速率是
+   **279–420 kbps**，标准 2-DH5/3-DH5 EDR 完全装得下 ⇒ 专有调制**不是为速率
+   而生**，它要成立只能靠"健壮性"这个动机——而那正是白皮书的说法。
+
+⇒ **"不可见"这条结论的承重证据回到我们自己的空口抓包**（三个受控锚定的源），
+白皮书只证明"存在一种高通专有调制"。此前把白皮书当成"必要性"依据是越界的。
+
+**嗅探器论证要补一条限制**（否则评审一句话就能推翻整条负结果）：Ubertooth 官方
+FAQ 只列 **Basic Rate 与 BLE**，**EDR 载荷不可解**；但 EDR 的**接入码与包头仍是
+GFSK**，而 survey 检测用的正是它 ⇒ **"零命中"依然有意义**（只是它计的是"检测到的
+包"，不是"解出的音频"）。已写进 STATUS §11。
+
+**新的支持性数据点**：森海**自己的 BTD 700 dongle** 被官方文档描述为支持
+"aptX Adaptive, including the aptX Lossless and 24 bit / 96 kHz"，并且**自己处理
+编解码器**以服务不支持高级编解码的源。这是 **USB dongle 而不是骁龙手机**，
+独立印证了"关键的硅在**源端的音频设备**里，而不在主机 SoC 里"——与 §21.21(五)
+的手机 offload 证据指向同一个模型。
+
+**专利：负结果，不要引用任何专利。** 检索到的候选（US20190007850A1、
+US20220345241A1、US20220383881A1、US20190104424A1）全是链路自适应/低时延专利，
+无一提到 High Speed Link。
+
+**术语修正**：aptX Lossless 速率用高通口径 "up to 1 Mbit/s"（流传的 1.1–1.2 Mbps
+来自 What Hi-Fi 对高通简报的转述）；R2/R2.2/R3 是社区标签，高通公开名只有
+"aptX Adaptive 2.0"（已写进 STATUS §4.4）。
+
+**已同步修改**：STATUS 开篇、§1、§4.4、§11，以及两份上游草稿
+（`UPSTREAM-PR16-UPDATE.md`、`UPSTREAM-PIPEWIRE-2656.md`）——都改成
+"高通文档只证明存在专有调制、不证明它承载音频"，并把嗅探器限制写明。
