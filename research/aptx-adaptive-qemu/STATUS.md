@@ -603,7 +603,7 @@ only: the run below uses **survey** mode, which sweeps all 79 channels and
 therefore cannot be blinded by a channel map. The sensitivity objection is
 answered by an in-situ positive control at the same distance to the same sink.
 
-| State (same room, same instrument, same headset) | Time | Phone `40fddd` | This host `c50142` |
+| State (same room, same instrument) | Time | Phone `40fddd` | Host `c50142` |
 | --- | --- | --- | --- |
 | Phone plays Adaptive, host radio off | 109 s | **0** | -- |
 | Phone plays Adaptive, host idle | 99 s | **0** | 2 |

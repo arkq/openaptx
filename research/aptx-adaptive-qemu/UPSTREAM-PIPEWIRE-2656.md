@@ -1,3 +1,5 @@
+# aptX Adaptive on non-Qualcomm hardware: measured data
+
 Adding measured data rather than a feature request.
 
 **A working host-side implementation exists out-of-tree.** A PipeWire fork

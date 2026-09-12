@@ -1,11 +1,11 @@
-## Update: evidence on "is this a dead end?"
+# Update: evidence on "is this a dead end?"
 
 Answer: the host-side half is verified and is not the problem. The stream is
 nevertheless not audible on the headset we tested, and the evidence now points
 to a vendor audio path below the host stack rather than to the bitstream. What
 follows separates measurement from inference.
 
-### What is verified
+## What is verified
 
 On an Intel AX210 (a non-Qualcomm controller), this branch produces an aptX
 Adaptive R2 stream that is correct on the wire:
@@ -27,7 +27,7 @@ Adaptive R2 stream that is correct on the wire:
 The parser and tests added in this PR describe the R2 form and are unaffected
 by the findings below.
 
-### Why it stays silent
+## Why it stays silent
 
 1. The headset's own app reports "aptX Adaptive 48 kHz" while the stream plays
    silently, so negotiation succeeds.
@@ -51,7 +51,7 @@ by the findings below.
    is "no access code was detected", not "we know what was sent instead"; a
    2.4 GHz SDR would settle that part.
 
-### Mechanism found
+## Mechanism found
 
 In an Android HCI log of a Snapdragon source, the entire session contains **no
 L2CAP media packets at all**. Immediately after AVDTP Start there is a single
@@ -83,7 +83,7 @@ EDR link's access code and header are still GFSK, so survey detection still
 sees such a link; the zero counts are meaningful, but they count detected
 packets, not decoded audio.
 
-### Value to upstream
+## Value to upstream
 
 The protocol facts above; two cheap tools — wire-level verification of a stream
 against what it declares, and a frame-entropy check that distinguishes real
