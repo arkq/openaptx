@@ -1894,3 +1894,270 @@ b7163b    0          14 次（0 dBm，11 信道）  0 ...
    别的 piconet 有 535 个包、最高 78 次；只说"没看到"是没有信息量的。
 2. **仪器的观测边界要写进结论**：Ubertooth 无法区分 AD 与 Lossless（本次实测两者逐项相同），
    所以"dongle 到底在跑哪种编码"必须由操作者/外部指示确认——一旦确认，结论方向随之改变。
+
+### 21.21 "方向 1"：把耳机侧的判决读出来（2026-09-12 上午）
+
+用户要求执行"方向 1 = 读耳机内部判决"，手机与电脑同时连着耳机。
+
+**读数一：耳机自己在静音推流期间说它正在收 AD 48 kHz。**
+宿主推流（`pw-play` 48 kHz/24 bit 测试音，链路经 `preflight.sh --fix` 确认为
+`aptx_adaptive` + MOMENTUM 5 默认 sink）时，用户在 Sennheiser Smart Control App 里
+看到 **aptX Adaptive 48 kHz**，而耳机**完全无声**（连底噪都没有）。
+⇒ **控制面（AVDTP/编解码器选择）是通的，失败点在其后的数据面。**
+
+**读数二：我们发出去的绝不是数字静音（此前从未检验过的分支，现已排除）。**
+同一抓包内依次喂三种已知不同的 PCM，再用 `/tmp/enc_phase_check.py` 按相位切片：
+
+| 相位 | 帧熵中位数 | 20 s 内不同帧数 | 判读 |
+|---|---|---|---|
+| 数字静音（`anullsrc`） | **0.33** | 约 1 种 | 静音码字 |
+| 粉噪声（`anoisesrc`） | 6.90 | 每 5 s 200 种 | 真实内容 |
+| 440 Hz 纯音 | 6.76 | 全部不同 | 真实内容 |
+| 停止播放后 | 0.33 | 回到静音帧 | 一致 |
+
+⇒ 编码器**确实在编码我们的音频**；"主机侧把编码器喂成静音"被证伪。
+（顺带得到一个新工具：帧熵"是否有内容"的活性判据。）
+
+**读数三：音量不是门控。** `org.bluez.MediaTransport1` 在 AD 播放期间
+`State=active`、`Volume=63/127`（≈50%，与 sink 音量一致），非 0。
+
+**读数四：耳机有一条可用的本地控制通道。**
+`sdptool browse` 只列公开浏览组的 4 条记录，但 BlueZ 缓存的 UUID 里有
+`a2129ff3-081b-4c45-8afe-469d9c4842ec`（= Sennheiser/Qualcomm GAIA v3 控制服务）。
+实测 **RFCOMM ch 11**、vendor `0x0495`：`GET_ANC_STATUS(0x1A05)` → `0x1B05 01`；
+GAIA core 命令（0x0300/0x0301/0x0304）返回 `0x03xx|0x0180` = 不支持。
+register-notification 扫描：**静默接受** 4,5,7,8,9,10,11,12,13,14,18,19,20,21,25,27,29,30
+（12=通透、13=ANC 与已知实现吻合），其余返回错误。
+注意：**手机 App 占用该服务时我们连不上（EBUSY）**，要并行读取需要用户先关掉 App。
+
+**读数五（本轮最重要）：高通手机把 aptX Adaptive 完全卸载在控制器里。**
+手机 btsnoop（`btsnoop_hci_20260909_135939.log`）里：
+AVDTP `Set Configuration(0xad)` / `Open` / `Start` 全部 Response Accept，
+但**整段播放期间 0 个 L2CAP 媒体包**（无 `80 60` RTP、无 656 B 帧、无 676 B PDU）；
+`Start` 之后紧跟的是一条 **`Vendor (0x3f|0x000a) plen 66`**，载荷里正是那串
+AD 的 SET_CONFIG 字节 `d7 00 00 00 ad 00 40 02 50 64 64 64 ff ff 00 01 92 00 00 0f 02 03 03 03 00 aa`。
+整份日志里宿主→控制器**没有**任何音频量级的载荷（最大 vendor 命令就是这条 66 B）。
+⇒ 手机上主机的角色只有两件事：**AVDTP 协商** + **把 codec 配置交给控制器**；
+PCM 进芯片、编码、空口发送全部在控制器内部完成。
+与 §13.11 的旧观察（"反向反馈走控制器→DSP 私有通道"）完全一致，但这次是正向证据。
+
+**读数六：BT11 侧同构。** `bt11-edkcs/download_aptx_adaptive_encode.edkcs`（66 956 B）
+等文件是 QCC5181/Kalimba 的**能力镜像**（`aa aa 01 00 …` 头），即编码器同样是**芯片内 DSP**
+加载的能力，而不是宿主侧软件。
+
+**读数七：标准 LMP 能力页不解释这道门槛。**
+AX210 页 0 = `bf fe 0f fe db ff 7b 87`（Intel 0x0002 / LMP 5.4 / sub 0x30ca），
+手机高通 = `ff fe 8f fe d8 3f 5b 87`；差异**全是标准位**，且 AX210 基本是超集
+（多 EV5、AFH-capable-slave、EIR、simultaneous LE+BR/EDR、variable inquiry TX power 等）。
+⇒ 门槛即便存在，也不在标准能力页里（专有扩展本来就不在这里），
+所以"换高通卡能不能解锁"**无法用能力位预判**，只能实机试。
+
+**方法论沉淀（新增三条）**：
+
+1. **抓包格式要认清**：`btmon -w` 写的是 BlueZ monitor 格式（btsnoop datalink **2001**），
+   记录前有 monitor 头，`acl.py` 那类按 H4 头（`data[0] in (2,5)`）解析的脚本会**静默返回 0 条**。
+   要么用 `btmon -r`/`stream_check.py` 的扫描法，要么按 monitor 格式解析。
+2. **后台作业里没有 sudo**：`sudo` 报 "必须属于用户 ID 0 并且设置 setuid 位"（用户命名空间），
+   而前台调用正常。需要 root 的抓包（`btmon -w`）要么在前台跑，要么用前台把进程 detach 出去。
+   本机 `PATH` 里的 sudo 不是 setuid 版，正式脚本应使用 `/run/wrappers/bin/sudo`。
+3. **App 读数是人类通道，但要设计判别**：App 只在**有音频播放时**才显示编解码器
+   （用户实测），且"电脑播放"与"手机播放"都显示 48 kHz，速率无法区分两条链路；
+   本轮靠"手机链路没有媒体包 + 播放时 App 显示电脑为活跃源"完成归属判断。
+
+**对方向 3（换高通网卡）的含义（诚实评估）**：
+换卡能复刻的只有"协商 + 配置"这前半步。真正让耳机出声的是**芯片内编码 + 私有空口**，
+而 Linux 主线缺三样东西：①（若有）激活 offload/QHS 的厂商命令通道；
+②把 PCM 送进芯片的通路（手机上走 SoC 内部音频总线，x86 的 M.2 卡是 USB HCI，没有这根总线）；
+③与目标芯片系列匹配的能力镜像（BT11 的 QCC5181 镜像不能用于 FastConnect 系列）。
+⇒ **单换网卡就把 AD 跑通的概率不高**；先做的应该是"零成本反证"：
+用 Windows + 现有 AX210 试一次 AD（若出声则说明耳机不要求高通，问题在我们的软件栈），
+以及用 Ubertooth 确认我们的 AD 媒体**是否真的上了空口**（控制器是否只是"收下了"）。
+
+### 21.22 方向 3 的尽调结果：结构性否定 + 三处自我更正（2026-09-12 中午）
+
+委托子代理做了独立尽调，报告：`~/research/aptx-adaptive-qualcomm-module-report.md`（702 行，逐条带源）。
+结论直接推翻了 §21.21 末尾我给用户的两条建议，必须记录在案。
+
+**（一）"QHS"确有其事：高通的 "High Speed Link 调制技术"。**
+骁龙畅听（Snapdragon Sound）白皮书系列的公开转述里有原句：
+"骁龙畅听通过高通 High Speed Link 调制技术可实现 **4dB 的增益**，并通过 aptX Adaptive 技术
+进一步实现 2dB 的增益，减少重传次数并缩短空中传输时间"。
+关键词是**调制（modulation）**——改变的是空口波形，这正好解释为什么三个可听源在标准
+BR/EDR 嗅探器上**完全不可见**。⇒ §21.20 的"专有链路是唯一有观测支持的读法"从推断升级为
+**有厂商文档支撑**。注意两点保留：缩写 "QHS" 是社区叫法（高通文档里没有这个缩写）；
+"aptX Adaptive 必须依赖它"仍是**推断**，高通把两者作为并列的健壮性特性描述。
+
+**（二）换卡在 Linux 上是结构性无效，不是概率问题。**
+
+| 事实 | 依据 |
+|---|---|
+| BlueZ 主线**没有** aptX Adaptive 的 codec ID | BlueZ 5.87 `profiles/audio/a2dp-codecs.h` 只有 SBC/AAC/aptX/FastStream/aptX LL/aptX HD/LDAC/Opus |
+| 主线 Linux **完全没有 A2DP offload** | `hci_qca.c` 只有 `QCA_CAP_HFP_HW_OFFLOAD`（语音）；`hci_set_aosp_capable()` 只是置标志位 |
+| AOSP 标准化 offload 里**没有** Adaptive 位 | `Start A2DP offload` 的 Codec 字段仅 SBC/AAC/APTX/APTX HD/LDAC/Opus，能力掩码 "Bit 6-31 reserved" |
+| `btfm_slim.c` **不在主线** | 主线 `drivers/bluetooth/` 无此文件（v5.15/v6.6 均 404），只存在于 AOSP out-of-tree 的 `kernel/msm-modules/bt` |
+| M.2 形态没有音频总线 | 卡的 BT 侧就是 USB 设备（`btusb`+`btqca`），没有 SLIMbus/I2S 走线 |
+
+⇒ **门槛在主机栈，不在射频**。买卡 + Linux 仍然只能走"主机侧编码 + 标准 EDR"，
+结果与今天的 AX210 等价。**本项目笔记里"换卡即可"的说法作废。**
+
+**（三）三处自我更正。**
+
+1. **§21.21 建议的"零成本 T0：Windows + AX210"作废**。Microsoft Learn
+   "Bluetooth Classic Audio" 的 Win11 A2DP 表脚注写明：*aptX Adaptive 仅在配备兼容
+   **高通**蓝牙射频的部分 Windows 设备上受支持*；Intel 官方 KB 从不声称支持 Adaptive，
+   第三方 A2DP 驱动也明确表示因专利/许可不做 Adaptive。⇒ AX210 + Windows 最好只有
+   aptX Classic，**比 Linux 上已经可用的 aptX HD 更差**。
+2. **用户问的"QCNCM = FastConnect 7900"不成立**：`QCNCM865` = WCN7850/WCN7851 =
+   **FastConnect 7800**（`linux-firmware` 里是 `ath12k/WCN7850/hw2.0/ncm865/`）。
+   FastConnect 7900 是**集成在骁龙里的 6nm Wi-Fi7+BT+UWB**，**没有 M.2 模块**
+   ⇒ "一步到位买 7900"这件事**不存在可购物品**。
+3. `QCNFA765` = WCN6855（Linux 命名）= FastConnect 6900 属实，且两张卡在 Linux 侧
+   都有主线支持（`ath11k`/`ath12k` + `btusb`/`btqca`，本机 `/run/current-system/firmware/qca/`
+   里固件已具备）。但按（二）这**对本项目目标没有用**。
+
+**（四）唯一"可能有效"的换卡实验（且是 Windows 路径）。**
+`QCNCM865`（闲鱼拆机 ¥150–200）+ **Windows 11 24H2** —— 这是全部资料里唯一
+"笔记本 + 高通射频 ⇒ 官方文档说 Adaptive 可用"的组合。风险：脚注里的 "select Windows devices"
+指 OEM 验证过的机型列表，DIY 换卡不一定在列；且即使成功，它证明的是**厂商栈能跑**，
+**不会给 Linux 带来支持**。⇒ 作为"验证 QHS 假设"的诊断有意义，作为"达成项目目标"无意义。
+
+**（五）由此得到的项目级结论（要写进给用户的总结与上游 PR）。**
+1. 在"不外接 USB"的约束下，**本机 Linux 目前没有可达的 aptX Adaptive 路径**，
+   原因是整条 Linux 栈缺少厂商 offload 与 codec 定义，而不是本项目实现有 bug；
+   本项目已经做到的是"用主机侧实现把 AD 帧正确送进控制器"（形态、容量、内容三项均已实测）。
+2. 本机**已经可用**的无线高音质：aptX HD（894 B / 55 kB/s，实测出声）。
+   已拥有且**确实能跑 AD/Lossless** 的源是 **FiiO BT11**（USB，属于外接设备）。
+3. 想要无线高音质 + 现代编解码，长期正解是 **LE Audio/LC3**（AX210 原生支持，
+   但需要换一副支持 LE Audio 的耳机）。
+4. 本项目最有价值的公开产出是**这份负结果 + 机制解释**（含 §21.22 的文档依据），
+   可以直接补进 openaptx PR #16 与 PipeWire issue #2656 的讨论。
+
+### 21.23 方向 3 尽调终版：新增一条"会反噬 Linux"的硬件风险（2026-09-12 中午）
+
+终版报告 `~/research/aptx-adaptive-qualcomm-module-report.md`（777 行、65 个来源、
+31 处置信度标注、12 处显式"unknown"）。相对 §21.22 的增量，全部会改变决策：
+
+**（一）新增硬件风险：WCN785x（QCNCM865）会在片上 NVM 里 latch
+`PATCH_UPDATED|SYSCFG_UPDATED`。** 一旦 Windows（或任何厂商栈）初始化过这张卡，
+之后再进 Linux，`btusb` 会**信任这两个标志位并跳过固件上传**，结果是 **Linux 侧蓝牙音频失效**；
+修复到 **7.3-rc2 仍未合入**。⇒ 双系统跑"Windows 实验"**会反过来破坏 Linux 侧**。
+这条把 §21.22(四) 那个"唯一可能有效的换卡实验"从"值得一试"降级为"有代价的赌博"。
+
+**（二）其他支持性事实。**
+- QCNCM865 的 **BT 音频**在 Linux 7.1 之前长期不可用（bluez #750："鼠标能连，音频设备连不上"），
+  本机内核 7.2.3-zen1 已越过该修复。
+- 两张卡的固件**本机已具备且可再分发**（`/run/current-system/firmware/qca/`
+  `rampatch_usb_00130201.bin` / `rampatch_usb_00190200.bin`），无需从 Windows 提取。
+- **QCNFA765 不推荐**：无可靠现价、有"完全不识别"的个案、Windows 侧驱动是 Win11 专属、
+  且只有 Wi-Fi 6E（不比 AX210 强）。
+- 修正三处名称：`btfm_slim.c` **不在主线**（只在 AOSP out-of-tree 的 `kernel/msm-modules/bt`），
+  §21.22 里"内核里那类驱动"的说法不准确；FastConnect 7900 真实料号是
+  **WCN7880/WCN7881**（焊死在骁龙封装内，无 M.2、无 Linux 支持），"WCN7950"不存在；
+  Lenovo FRU `5W10V25827` 是 **Fibocom FM350-GL 5G WWAN**，不是网卡（别照它采购）。
+
+**（三）两条"全网负结果"（对我们有利，值得写进公开材料）。**
+1. **不存在任何非高通的 aptX Adaptive 发射芯片**：已确认的 BT11=QCC5181、
+   Avantree DG60 Aura、Questyle QCC3086、Shanling UP6=QCC5125 **全是高通**；
+   Creative BT-W5/W6、Sennheiser BTD 600/700、UGREEN、1Mii 的芯片型号未公开。
+   openaptx 只到 aptX/aptX HD（维护者明确"No support for AptX Adaptive"）。
+2. **没有任何"Intel 控制器 → Snapdragon Sound 耳机出声"的一手报告（任何 OS）**。
+   ⇒ 本项目的负结果目前是**独一份**的观测。
+
+**（四）一条支持性论证（补强 §21.21 读数一）。**
+森海对"编解码器不匹配"的**文档行为是回退到别的编解码器，而不是静音**。
+我们的场景是"App 报告 AD 48 kHz + 完全无声"，⇒ 恰好证明**协商成功、流被拒收**，
+拒收点只能在链路层。这一条把 §21.20 的结论从"最强读法"提升为"文档行为排除法"。
+
+**（五）排序修订（终版建议）。**
+
+| 排序 | 选项 | 说明 |
+|---|---|---|
+| ① | **什么都不买**（保留 FiiO BT11） | 理性默认：AD/Lossless 已经能用；本项目目标"源"已在手，只是它是 USB 设备 |
+| ② | QCNCM865 + Windows 11 24H2（¥150–380） | 唯一能判定"高通链路假设"的实验；但新增（一）的反噬风险 + OEM 白名单不确定 |
+| ③ | QCNCM865 仅作 Linux Wi-Fi 升级 | 可用，但**不带来 AD**，且 CN 6 GHz 受限，收益有限 |
+| ④ | QCNFA765 | 不推荐 |
+| ⑤ | QCNFA725 | 直接跳过（无零售、无价格） |
+
+**（六）终版补充（报告增至 865 行）：换卡在"蓝牙音频可靠性"这条轴上也是降级。**
+用户真正在意的失败形态 —— **"BT HID 能用、BT 音频不能用"** —— **两张高通卡上都有实测记录**：
+
+| 卡 | 已记录的失败 |
+|---|---|
+| QCNFA765 / WCN6855 | ThinkPad T14 Gen4 AMD 用户：HID 正常、音频 `avdtp_connect_cb() ... Connection refused (111)`；另有 **8 个月完全不能用的 BT**（`EPROTO -71`，kernel bugzilla #217805 仍为 NEW），且同一硬件"Ubuntu 22.04 live USB 能用、Arch 6.6.4 不能用" |
+| QCNCM865 / WCN7850 | BlueZ #750："只有 QCNCM865 连不上音频设备"、"音频设备一上来 wireplumber 就崩" |
+
+**没有找到任何证据表明高通 M.2 卡在"蓝牙音频"上强于 Intel。** 用户的使用场景就是蓝牙耳机
+⇒ 换卡是**在最重要的那条轴上的可靠性降级**，不只是"平移"。这一条现在是终版报告的
+Bottom line 与 §2.6–2.7/§8 的一部分。
+
+其它并入的采购陷阱（都已写进报告）：
+- `btusb.c` 有 ROM `0x00130100`（WCN6855 1.0）的条目，但上游**没有**
+  `qca/rampatch_usb_00130100.bin`（404）⇒ 这类卡会 `failed to request rampatch file`。
+- QCNCM865 的**最低内核取决于 USB ID**（`0cf3:e700`=5.19、`0489:e0fc`=6.13…）
+  ⇒ 来历不明的拆机卡可能悄悄要求更新的内核。
+- **"固件在上游"≠"你的板子被覆盖"**：ASUS Zenbook A14 出现
+  `failed to fetch board data for device=1103, subsystem-device=950a`（Launchpad #2164527）。
+- 真正的"踩坑料号"是 **QCA6391**（不是 "WCN6856"）：工业 chip-on-board，M.2 2230 版本是
+  **B-KEY 插不进 E-KEY 槽**，且 linux-firmware 没有它的 board data。
+- 采购前诊断：卡**不在 `lsusb`** ⇒ 怀疑**插槽**（E-key 的 USB D+/D- 在 3/5 脚；
+  ThinkPad P14s Gen5 的 WWAN 槽就没有 USB 2.0 ⇒ 没有蓝牙）；**在 `lsusb` 但固件失败**
+  ⇒ 怀疑驱动/固件。**Wi-Fi 侧成功与 BT 侧无关。**
+- 白名单：现代联想 M.2 **WLAN** 无白名单证据（1802 是 mini-PCIe 时代；T480s 的 WWAN
+  白名单 2022 年确实生效过，机制真实）；ASUS 无白名单证据，且 **ASUS 自己就在部分机型上
+  用 QCNFA765**。但用户具体机型的插槽仍未核实。
+
+**⇒ 终版建议收敛为一句：在任何形态下都不要为 aptX Adaptive 换卡。**
+唯一"非换卡不可"之外的选择仍是：Linux 用 aptX HD、需要 AD/Lossless 时用 BT11、
+长期转 LE Audio。
+
+**（七）内核门槛的两处更正（第三批，报告增至 914 行）。**
+§21.23(二) 里"最低内核取决于 USB ID"方向对，但数字要改：
+
+| 项目 | 我先前写的 | 更正后 |
+|---|---|---|
+| QCNCM865 **蓝牙** | 0cf3:e700=5.19、0489:e0fc=6.13 | 5.19 只覆盖 `0cf3:e700`（零售卡很少用）；`0489:e0fc`=6.13、`2c7c:0130`=6.14；**零售批量 ID 是 6.15**（一次补丁加 13 个 ID，"extracted from Windows driver inf"）。内核比 ID 旧 ⇒ `btusb` **根本不认领这张卡**，蓝牙完全不存在 |
+| QCNCM865 **Wi-Fi** | 6.3 起可用 | 实际要 **≥6.16**：6.3–6.12 不可用；6.12.27+ 有硬回归（`failed to start core: -110`，kernel bz 220108，维护者称修复进 v6.16-rc1） |
+
+新增缺陷（报告 §2.4d）：**挂起恢复的修复未上游**（`ath12k_mhi_stop()` 仍无条件
+`ATH12K_MHI_DEINIT`，"mainline and linux-next still have the unconditional DEINIT"，
+Ubuntu 带 SAUCE 补丁）；部分 AMD 板上有控制器崩溃/重枚举循环（`hardware error 0x85`，
+根因未知）；**LE Audio 在其上被报告为完全不可用**；VT-d/IOMMU 相关的冷启动失败；
+2026 年还有内存损坏/内核 panic 与"DO NOT BUY THIS CARD"级别的报告。
+反向的正面点：Wi-Fi 7 在当期内核上确实能跑（6 GHz / 320 MHz 实测 2 Gbps+）。
+
+**净效果：方向不变，程度更强。** QCNCM865 上限高（真 Wi-Fi 7）、下限也低（要新内核 +
+未合的挂起 bug）；QCNFA765 仍是风险更低的"高通选项"；**若目标是可靠的蓝牙音频，
+AX210 仍是不动它的理由**。本机内核 7.2.3-zen1 两个门槛都已满足——这些更正的意义在于
+"换到别的机器"或"购物时看到过时的 '6.3/5.19 就够' 说法"时的判断。
+
+**（八）第四批更正：一条被我过度加权的论据必须软化（报告增至 968 行）。**
+§21.23(六) 用 kernel bugzilla #217805（QCNFA765"8 个月完全不能用"）当作
+"高通罚则对两张卡都成立"的承重论据，**这是过度加权**。该报告人自己的最终更新说：
+蓝牙天线**物理断开**，他重新接上后"老 Ubuntu 22.04 live USB 能用，现代 6.6.4 Arch
+仍不能用"。⇒ 活下来的是一个**单机上的内核版本依赖**（真实，但**不能推广到所有
+QCNFA765**，bug 仍为 NEW）。
+
+**并且存在直接的反证**：`btusb` 补丁作者 Pascal Giard 在这张卡上实测 A2DP 推流
+（"approximately 7 messages per second WHEN STREAMING AUDIO TO A SPEAKER"，
+commit `0b00bee940cb`，Tested on ThinkPad T14 gen2 AMD + `0489:E0D0`）；
+linux-hardware.org 有 523 条 `10ab:9309` 探测绝大多数为"works"。
+
+**QCNFA765 的修正结论（更简单）**：**内核 5.17 就完整覆盖该卡（Wi-Fi + 蓝牙）**——
+五个 ThinkPad USB ID 在 v5.16 全部缺席、v5.17 全部出现，WCN6855 hw2.1 的 ath11k 支持
+同版本落地（`d1147a316b53`，有 `Fixes:` 但**无 `Cc: stable`，从未回移**，
+旧内核报 `Unsupported WCN6855 SOC hardware version: 18 17`）；GF 变体 NVM 另需 6.16。
+我先前"BT 5.10 / Wi-Fi 5.14"的说法对 ThinkPad 机型是误导。注意 linux-hardware.org 的
+LKDDb 声称 5.10 即可用，与 tag 证据矛盾——**信源码，不信数据库**。
+⇒ QCNFA765 在 x86 + 内核 ≥5.17 上蓝牙（含 A2DP）通常可用，置信度中高；
+USB 蓝牙棒从"必需"降级为"便宜的兜底"。
+
+**排序不变，但第 4 名的理由变成结构性的而非可靠性**：QCNFA765 仍然不该买，
+原因是**它在 Linux 上同样给不了 aptX Adaptive**（没有 BlueZ codec、没有 A2DP offload、
+没有 QHS 支持），且 Wi-Fi 只有 6E（不比 AX210 强）——**不是因为这卡差**。
+QCNCM865 依然是两者中对蓝牙音频**更冒险**的那个；且**Linux 上蓝牙能连≠QHS 可用**
+（QHS 是射频/固件特性，Linux 侧完全没有驱动支持）。
+
+另并入两条小修正：Debian/Ubuntu 上 ath11k 固件在**单独的 `firmware-atheros` 包**里，
+缺了会报 `failed to load ath11k/WCN6855/hw2.1/amss.bin (-2)`（Debian #1026028）；
+不要把 ThinkPad X13s 的"高通蓝牙射频差/2–3 m"结论套到这些卡上——那是
+**UART 接法**（`qca_uart_setup()`），M.2 卡是 USB（`btusb`）。

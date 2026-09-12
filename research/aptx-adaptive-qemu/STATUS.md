@@ -1,23 +1,37 @@
 # aptX Adaptive / Lossless on a non-Qualcomm Linux host: status report
 
-**Status:** the *encoder* path is solved and verified; the *sink* still does not
-decode the stream. The Android reference source and the host now emit the same
-SET_CONFIG, the same RTP header, the same OTA header and the same codec frames
-(verified byte for byte), yet the Sennheiser MOMENTUM 5 stays silent while it
-plays aptX HD from the same host and aptX Adaptive from a phone and from a FiiO
-BT11. This report records the verified protocol facts, the host-side bugs that
-were found and fixed, and the experiments that rule out the bitstream, the AVDTP
-configuration and the wire format as the cause.
+**Status:** the *encoder* path is solved and verified; the *link* is where the
+stream dies, and it is not something a host-side encoder can fix. The Android
+reference source and the host emit the same SET_CONFIG, the same RTP header,
+the same OTA header and the same codec frames (verified byte for byte), yet the
+Sennheiser MOMENTUM 5 stays silent while it plays aptX HD from the same host
+and aptX Adaptive from a phone and from a FiiO BT11.
 
-An air capture with an Ubertooth One adds what the host log cannot show. The
-phone's audio never appears as standard BR/EDR traffic, and neither does the
-BT11's when it streams ordinary Adaptive: in both cases the piconet is
-invisible to a standard receiver, even though the audio plays. The same BT11
-in Lossless mode runs a link that is plainly visible and also plays. Ordinary
-Adaptive therefore seems to be decoded only over a proprietary link, while
-Lossless/R3 is decoded over plain EDR -- which makes the R2.2/R3 path the one
-worth completing. Section 7 has the experiments, the operator-anchored unplug
-tests that settled it, and the measurement limits of the sniffer.
+**The headset itself says the codec is fine.** While the host streams Adaptive
+that the headset will not play, the Sennheiser app reports *aptX Adaptive
+48 kHz*, the A2DP transport is `active` at volume 63/127, and Sennheiser
+documents *fallback* (not silence) for a codec mismatch. So negotiation
+succeeds and the sink rejects the stream later, on the link.
+
+**Everything that does play leaves the standard PHY.** Air captures with an
+Ubertooth One show that the phone's Adaptive audio never appears as standard
+BR/EDR traffic, and neither does the BT11's -- in both modes, including
+Lossless, the piconet is invisible to a standard receiver while the audio
+plays. The one source whose Adaptive traffic *is* plainly visible on standard
+EDR is this host, and it is the one that is silent. A new control experiment
+closes the last hole in that reading: the host's stream is not digital
+silence (silence encodes to a single repeated frame, pink noise and a tone
+produce fully varying frames), and the sink's silence is therefore not
+explained by anything the host sends.
+
+**Why a module swap does not fix it.** On the sources that work, the host never
+sends Adaptive media at all: the phone's HCI log contains no L2CAP media
+packets, and immediately after AVDTP Start it hands the A2DP configuration to
+its Qualcomm controller in a single vendor command. The controller encodes
+on-chip and transmits over Qualcomm's documented "High Speed Link modulation".
+Mainline Linux has none of that: BlueZ has no aptX Adaptive codec id, there is
+no A2DP offload in `hci_qca`, and an M.2 card in a laptop has no audio bus to
+its controller. A 914-line due-diligence report is summarised in section 11.
 
 All measurements below were taken on the system described in section 2 and are
 reproducible with the tooling in this directory (section 9).
@@ -39,8 +53,32 @@ What is now proven:
    8-byte OTA header and sent 668 bytes, which was a regression (section 5).
 4. **The sink still produces no audio**, including when the host replays the
    Android source's own captured frames.
+5. **The sink accepts the codec.** During a silent Adaptive stream the
+   Sennheiser app reports *aptX Adaptive 48 kHz* to its owner, and the host's
+   A2DP transport is `active` with volume 63/127. The failure is downstream of
+   negotiation, not in it.
+6. **The stream is not silence, and not quiet.** A three-way control (digital
+   silence / pink noise / 440 Hz tone) shows the encoder following the input:
+   silence yields a single repeated frame (byte entropy 0.33, ~1 distinct
+   frame in 20 s), noise and tone yield fully varying frames (median entropy
+   6.8-6.9, every frame distinct). Replayed frames therefore carry real audio.
+7. **Every source that plays leaves the standard PHY.** The phone's Adaptive
+   link and the BT11's Adaptive *and* Lossless links are invisible to an
+   Ubertooth One in steady state while the music plays; only this host's
+   Adaptive link is visible on standard EDR, and only it is silent.
+8. **The working sources never send Adaptive media from the host.** The
+   phone's HCI log has no L2CAP media packets at all; right after AVDTP Start
+   it hands the A2DP configuration to its Qualcomm controller with one vendor
+   command (`0xFC0A`, 66 bytes, containing the byte-identical SET_CONFIG).
+   Encoding and transmission then happen inside the chip.
 
-What is not solved: why the sink rejects an otherwise byte-identical stream.
+What is settled: the bitstream, the AVDTP element, the wire format, the volume
+and the negotiation are all fine, so the rejection is at the link. What is
+*not* settled: the exact mechanism, which is undocumented. The best-supported
+reading is Qualcomm's documented "High Speed Link modulation" -- a
+link-budget feature that changes the over-the-air waveform, which is exactly
+what would make a working stream invisible to a standard receiver (sections
+7.4 and 11).
 
 ## 2. Hardware and system
 
@@ -291,6 +329,10 @@ The following hypotheses were tested and are **not** the cause of the silence:
 | Wrong link rate | 44.1 kHz and 48 kHz, ordinary R2 form | silent |
 | Capability advertisement | R2.2 bit set, encoder left on R2 | silent |
 | Byte-identical at 44.1 kHz | same element as the phone | silent |
+| Host volume / gain | transport `active`, volume 63/127 | not a gate |
+| Encoder fed silence | silence vs noise vs tone control | real audio |
+| Codec rejected at negotiation | app reports "Adaptive 48 kHz" live | no |
+| Lossless on standard EDR | BT11 Lossless piconet invisible too | withdrawn |
 
 The last three rows are the strongest form of the test, and they were re-run
 under a mandatory gate (`preflight.sh`: the card must really be on
@@ -528,6 +570,60 @@ spurious gaps of 25 to 78 s (`0xEE02F8` and `0x2AB332` both did in the final
 run). `0x6A8FCC` used to be listed here as a third example; it is not an
 artefact at all, it is the BT11's Adaptive piconet (section 7.2).
 
+### 7.4 The headset's own verdict, and where working sources send audio
+
+Three measurements close the remaining gap between "our stream" and "the
+sink's decision".
+
+**The sink accepts the codec.** With the host streaming Adaptive that the
+headset will not play, the Sennheiser app reports *aptX Adaptive 48 kHz* to its
+owner, and lists the computer as the active playing device. The app only shows
+a codec while audio is playing, so this is a live reading and not a cached
+capability. (The same app shows 48 kHz for the phone's own Adaptive link, so
+the rate alone does not identify the link; the "active playing device" line
+does.) Sennheiser documents *fallback* to another codec -- not silence -- for
+a codec mismatch, so a negotiated Adaptive stream that produces silence means
+the stream was accepted and then dropped further down.
+
+**Gain is not the gate, and the stream is not silence.** The host's A2DP
+transport reports `State=active`, `Volume=63/127` (about 50 percent) during the
+silent stream. Feeding three known inputs to the same sink shows the encoder
+following its input:
+
+| Input | Median byte entropy | Distinct frames | Reading |
+| --- | --- | --- | --- |
+| Digital silence | 0.33 | ~1 in 20 s | one repeated frame |
+| Pink noise | 6.90 | 200 per 5 s | real content |
+| 440 Hz tone | 6.76 | all distinct | real content |
+| Playback stopped | 0.33 | back to one frame | consistent |
+
+The silent stream therefore carries real audio to the sink. (This control also
+produced a reusable tool: frame entropy as an "is there content" liveness
+test, independent of the encoder's own reporting.)
+
+**The sources that play never send Adaptive media from the host.** In the
+phone's HCI log the AVDTP sequence completes -- Set Configuration `0xad`,
+Open, Start, all accepted -- and then, for the whole streaming session, there
+are **no L2CAP media packets at all**. The only large host-to-controller
+command anywhere near the transition is a single vendor command
+(`Vendor (0x3f|0x000a)`, 66 bytes) whose payload contains the A2DP
+configuration, byte-identical to the SET_CONFIG above. There is no
+audio-sized traffic from host to controller for the entire session. On the
+BT11 side the same architecture shows up in its firmware package: the encoder
+is a Qualcomm capability image for the chip's DSP, not a host library.
+
+So both working sources hand the *configuration* to a Qualcomm controller and
+let the chip encode and transmit, and neither puts Adaptive media on standard
+BR/EDR. That is the same asymmetry the air capture shows, now seen from the
+host side -- and it is why the stream's correctness was never the issue.
+
+A tooling note for anyone repeating this: the headset exposes a Sennheiser /
+Qualcomm GAIA v3 control service (SDP `A2129FF3-081B-4C45-8AFE-469D9C4842EC`,
+RFCOMM channel 11, vendor `0x0495`). `GET_ANC_STATUS` (`0x1A05`) answers
+`0x1B05`; the GAIA core ids (`0x0300`/`0x0301`/`0x0304`) return the
+unsupported-with-error form `0x03xx|0x0180`. The phone's Sennheiser app holds
+this channel, so a second reader gets `EBUSY` until it is closed.
+
 ## 8. Reference data
 
 * Android SET_CONFIG towards the MOMENTUM 5:
@@ -605,7 +701,71 @@ wine aptx-adaptive-packet-header-strip_NEW_BYTE_SWAP.exe -e -d /tmp/dec /tmp/fra
 wine test-decoder.exe -i /tmp/dec/frames-clean.bin -o /tmp/out.wav -x hq
 ```
 
-## 11. Licensing note
+## 11. The hardware question: would a Qualcomm module fix it?
+
+The obvious next step for this project is to replace the internal M.2 Wi-Fi/BT
+card with a Qualcomm FastConnect module, on the theory that a Qualcomm-to-
+Qualcomm link would open the path the audio actually uses. An independent
+due-diligence pass (`~/research/aptx-adaptive-qualcomm-module-report.md`,
+914 lines, 64 sources, every claim carrying a confidence label or an explicit
+"unknown") concludes: **do not buy a module for this purpose.** Three
+independent reasons, in increasing order of force:
+
+1. **The card cannot be driven from Linux.** BlueZ mainline has no aptX
+   Adaptive codec id at all; mainline has no A2DP offload (`hci_qca` implements
+   only HFP voice offload); the SLIMbus audio path that feeds Qualcomm's
+   on-chip encoder (`btfm_slim`) is not in mainline and has no equivalent in an
+   M.2 socket, where the BT side is a plain USB device; and the encoder itself
+   is a licensed capability image for the chip's DSP -- the FiiO BT11 firmware
+   package shows exactly this form. A module swap therefore buys a standard HCI
+   radio, which is what the AX210 already is.
+2. **The candidate modules have a lower floor, on the axis that matters.**
+   `QCNCM865` is FastConnect 7800, not 7900 -- there is no FastConnect 7900 M.2
+   card (its real parts, WCN7880/WCN7881, are soldered into Snapdragon
+   packages). It needs kernel 6.15 or newer for Bluetooth on retail card ids
+   (older kernels do not claim the USB id at all) and roughly 6.16 or newer for
+   usable Wi-Fi, and it carries an unmerged suspend fix. It is also the riskier
+   of the two for Bluetooth audio: BlueZ issue #750 collects a wide, consistent
+   set of independent "won't connect to audio devices" reports for it, plus a
+   wireplumber crash. The QCNFA765 is in better shape than the first pass
+   suggested -- its best-known failure case turned out to involve a physically
+   disconnected antenna, and the author of a `btusb` fix streams A2DP on that
+   exact card -- so rank it as a medium-risk gamble, not a bad card. It is
+   still the wrong purchase here, but for the structural reason in item 1: it
+   cannot deliver aptX Adaptive on Linux either, and its Wi-Fi 6E is no better
+   than the AX210's.
+3. **The one configuration the vendors document is a Windows path.** Microsoft's
+   own Windows 11 A2DP table lists aptX Adaptive only "on select Windows
+   devices with compatible Qualcomm Bluetooth radios", so a plain Windows
+   install on the existing AX210 would give aptX Classic at best -- worse than
+   the aptX HD that already works here on Linux. The Qualcomm-radio + Windows
+   11 24H2 combination is the only laptop configuration the documents support,
+   and it is not a Linux fix; worse, booting Windows can latch firmware state in
+   the card's NVM that then breaks Linux Bluetooth audio (fix unmerged as of
+   7.3-rc2).
+
+On the mechanism itself, the best-supported reading is Qualcomm's documented
+"High Speed Link modulation" -- Snapdragon Sound material credits it with a
+4 dB link-budget gain alongside "advanced modulation and coding techniques".
+The acronym "QHS" is community shorthand and appears in no Qualcomm document,
+and that aptX Adaptive *requires* this link is an inference, not a documented
+requirement. It is, however, the only reading that fits every measurement in
+sections 6, 7 and 7.4.
+
+Two corpus-level facts are worth recording because they make this negative
+result more useful than it looks. Every confirmed aptX Adaptive transmitter
+chipset is Qualcomm (FiiO BT11 = QCC5181, Avantree DG60 Aura, Questyle
+QCC3086, Shanling UP6 = QCC5125), and no first-hand report was found of aptX
+Adaptive producing audio from an Intel controller to a Snapdragon Sound
+headset on any operating system.
+
+What is practically reachable from this machine today: aptX HD on Linux
+(measured working, section 6); Adaptive and Lossless through the FiiO BT11
+(a working Qualcomm source, but a USB device); and, for a modern codec without
+a vendor dongle, LE Audio -- which this AX210 supports, but the MOMENTUM 5
+does not, so it means different headphones.
+
+## 12. Licensing note
 
 The Qualcomm Hexagon module and the codec libraries it loads are user-supplied
 proprietary blobs and are deliberately not part of this repository. The helper is
