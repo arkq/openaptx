@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: CC0-1.0
 
 # Object files
+
+# Python bytecode from the research tools
+__pycache__/
+*.pyc
 *.o
 *.ko
 *.obj

@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 [open]aptx developers
+# SPDX-License-Identifier: MIT
+
+# Raw working logs: they contain long unbreakable reference hex dumps and a
+# Chinese-language handoff log, so they are excluded from the documentation
+# linter.  The user-facing report in the same directory (STATUS.md), its
+# README.md and TOOLS.md are lint-clean and are not ignored.
+research/aptx-adaptive-qemu/HANDOFF.md
+research/aptx-adaptive-qemu/gen-cntr-process-loop.md

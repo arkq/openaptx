@@ -103,6 +103,13 @@ optimization level.
 [1]: archive/aarch64 "Archive with Qualcomm apt-X encoding libraries"
 [2]: https://github.com/pali/libopenaptx "The apt-X encoder/decoder based on FFmpeg code"
 
+## aptX Adaptive
+
+Linux hosts can drive aptX Adaptive sinks today. The
+[aptX Adaptive notes](aptx-adaptive.md) document the two working host paths, the
+transport rules they depend on, and what is still out of reach: aptX Lossless
+cannot be produced from a non-Qualcomm host yet.
+
 ## Resources
 
 1. [AptX audio codec family](https://en.wikipedia.org/wiki/AptX)
